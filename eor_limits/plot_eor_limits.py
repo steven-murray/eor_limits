@@ -19,6 +19,12 @@ import json
 from eor_limits.data import DATA_PATH
 
 default_theory_params = {
+    "munoz_2021_AllGalaxies_z8.5": {
+        "paper": "munoz_2021",
+        "model": "EOS",
+        "redshift": 8.5,
+        "linewidth": 3,
+    },
     "mesinger_2016_faint_nf0.8": {
         "paper": "mesinger_2016",
         "model": "faint",
@@ -41,7 +47,7 @@ default_theory_params = {
         "paper": "mesinger_2016",
         "model": "bright",
         "nf": 0.5,
-        "linewidth": 3,
+        "linewidth": 2,
     },
     "pagano_beta1_z8.5": {"paper": "pagano_liu_2020", "beta": 1, "redshift": 8.5},
     "pagano_beta-1_z8.5": {"paper": "pagano_liu_2020", "beta": -1, "redshift": 8.5},
@@ -79,7 +85,7 @@ def read_data_yaml(paper_name, theory=False):
             paper_dict["delta_squared"] = [
                 float(val) for val in paper_dict["delta_squared"]
             ]
-        except (ValueError):
+        except ValueError:
             val_list = []
             for val in paper_dict["delta_squared"]:
                 if "**" in val:
@@ -94,7 +100,7 @@ def read_data_yaml(paper_name, theory=False):
         for ind, elem in enumerate(paper_dict["delta_squared"]):
             try:
                 paper_dict["delta_squared"][ind] = [float(val) for val in elem]
-            except (ValueError):
+            except ValueError:
                 val_list = []
                 for val in paper_dict["delta_squared"][ind]:
                     if "**" in val:
@@ -112,6 +118,7 @@ def make_plot(
     include_theory=True,
     theory_legend=True,
     theory_params=default_theory_params,
+    paper_redshifts=None,
     plot_as_points=["patil_2017", "mertens_2020"],
     delta_squared_range=None,
     redshift_range=None,
@@ -119,6 +126,7 @@ def make_plot(
     shade_limits="generational",
     shade_theory="flat",
     colormap="Spectral_r",
+    linewidths=None,
     bold_papers=None,
     fontsize=15,
     markersize=150,
@@ -127,6 +135,7 @@ def make_plot(
     sensitivity_style: Optional[dict] = None,
     fig: Optional[plt.Figure]=None,
     ax: Optional[plt.Axes]=None,
+    plot_filename="eor_limits.pdf",
 ) -> Tuple[plt.Figure, plt.Axes]:
     """
     Plot the current EoR Limits as a function of k and redshift.
@@ -148,9 +157,15 @@ def make_plot(
     theory_legend : bool
         Option to exclude theory lines from the legend. Used by some users who prefer
         to add the annotations on the lines by hand to improve readability.
+    paper_redshifts : dict
+        Dict specifying which redshifts to plot per paper. This can help simplify the
+        plot so that it's not so busy. Default of 'None' means all redshifts are plotted
+        for all papers. The keys should be paper names (specified as 'author_year'),
+        values should be lists of redshifts to include in the plot, e.g.
+        paper_redshifts = {"trott_2020": [6.5, 7.8], "li_2019": [6.5]}.
     plot_as_points : list of str
         List of papers that have a line type data model to be plotted as points rather
-        that a line.
+        that a line. This can help simplify the plot so that it's not so busy.
     delta_squared_range : list of float
         Range of delta squared values to include in plot (yaxis range). Must be
         length 2 with second element greater than first element. Defaults to [1e3, 1e6]
@@ -172,12 +187,19 @@ def make_plot(
         semi-transparent grey. Setting this to False results in no shading.
     colormap : str
         Matplotlib colormap to use for redshift.
-    bold_papers : list of str
-        List of papers to bold in caption.
     fig, ax
         The matplotlib figure and axis on which to draw the plot. If not given, will
         create one for you.
-
+    linewidths : dict
+        Dict specifying line widths to use for specific papers, to override the line
+        widths specified in the paper yamls. Keys are paper names, values are desired
+        line widths. Default of 'None' means use the values in the paper yamls.
+    bold_papers : list of str
+        List of papers to bold in caption.
+    fontsize : float
+        Font size to use on plot.
+    plot_filename : str
+        File name to save plot to.
     """
     if papers is None:
         # use all the papers. This gives weird ordering which we will fix later
@@ -198,6 +220,10 @@ def make_plot(
 
     if bold_papers is None:
         bold_papers = []
+    if linewidths is None:
+        linewidths = {}
+    if paper_redshifts is None:
+        paper_redshifts = {}
     generation1 = [
         "paciga_2013",
         "dillon_2014",
@@ -209,6 +235,7 @@ def make_plot(
     paper_list = []
     for paper_name in papers:
         paper_dict = read_data_yaml(paper_name)
+        paper_dict["name"] = paper_name
         if paper_name in bold_papers:
             paper_dict["bold"] = True
         else:
@@ -221,13 +248,15 @@ def make_plot(
             paper_dict["generation1"] = True
         else:
             paper_dict["generation1"] = False
+        if paper_name in linewidths:
+            paper_dict["linewidth"] = linewidths[paper_name]
         paper_list.append(paper_dict)
     if not papers_sorted:
         paper_list.sort(key=lambda paper_list: paper_list["year"])
 
     if include_theory:
         theory_paper_list = []
-        for name, theory in theory_params.items():
+        for _, theory in theory_params.items():
             theory_paper_yamls = [
                 os.path.splitext(os.path.basename(p))[0]
                 for p in glob.glob(os.path.join(DATA_PATH, "theory", "*.yaml"))
@@ -246,6 +275,12 @@ def make_plot(
                 dict_use = copy.deepcopy(theory)
                 dict_use.pop("paper")
                 paper_dict = get_pagano_2020_line(**dict_use)
+            elif theory["paper"] == "munoz_2021":
+                from eor_limits.process_munoz_2021 import get_munoz_2021_line
+
+                dict_use = copy.deepcopy(theory)
+                dict_use.pop("paper")
+                paper_dict = get_munoz_2021_line(**dict_use)
             else:
                 raise ValueError(
                     f"Theory paper {theory['paper']}  is not a yaml in the data/theory "
@@ -272,9 +307,9 @@ def make_plot(
         for paper in paper_list:
             if paper["type"] == "point":
                 delta_array = np.array(paper["delta_squared"])
-                paper_redshifts = np.array(paper["redshift"])
-                if paper_redshifts.size == 1 and delta_array.size > 1:
-                    paper_redshifts = np.repeat(paper_redshifts[0], delta_array.size)
+                redshift_array = np.array(paper["redshift"])
+                if redshift_array.size == 1 and delta_array.size > 1:
+                    redshift_array = np.repeat(redshift_array[0], delta_array.size)
                 if k_range is not None:
                     k_vals = np.asarray(paper["k"])
                     inds_use = np.nonzero(
@@ -286,7 +321,7 @@ def make_plot(
                     inds_use = np.nonzero(delta_array <= delta_squared_range[1])[0]
                 if len(paper["redshift"]) == 1 and inds_use.size > 0:
                     inds_use = np.asarray([0])
-                redshift_list += list(paper_redshifts[inds_use])
+                redshift_list += list(redshift_array[inds_use])
             else:
                 if not isinstance(paper["k"][0], list):
                     redshifts = [paper["redshift"][0]]
@@ -377,6 +412,14 @@ def make_plot(
                     & (delta_squared <= delta_squared_range[1])
                 )[0]
 
+            if len(paper_redshifts) > 0 and paper["name"] in paper_redshifts:
+                new_points_use = []
+                redshift_array = np.asarray(paper["redshift"])
+                for point in points_use:
+                    if redshift_array[point] in paper_redshifts[paper["name"]]:
+                        new_points_use.append(point)
+                points_use = np.array(new_points_use, dtype=int)
+
             if points_use.size == 0:
                 skipped_papers.append(paper)
                 print(
@@ -430,6 +473,8 @@ def make_plot(
                         )
 
                 lines.append(line)
+                legend_names.append(label)
+
         else:
             if not isinstance(paper["k"][0], list):
                 redshifts = [paper["redshift"][0]]
@@ -459,6 +504,14 @@ def make_plot(
                     continue
             else:
                 lines_use = np.arange(len(redshifts))
+
+            if len(paper_redshifts) > 0 and paper["name"] in paper_redshifts:
+                new_lines_use = []
+                redshift_array = np.asarray(redshifts)
+                for line in lines_use:
+                    if redshift_array[line] in paper_redshifts[paper["name"]]:
+                        new_lines_use.append(line)
+                lines_use = np.array(new_lines_use, dtype=int)
 
             print(f";  using {len(lines_use)} point{'s' if len(lines_use) > 1 else ''}.")
 
@@ -532,9 +585,9 @@ def make_plot(
                         alpha=alpha,
                         zorder=zorder,
                     )
-                if ind == 0:
+                if ind == min(lines_use):
                     lines.append(line)
-        legend_names.append(label)
+                    legend_names.append(label)
 
     if len(skipped_papers) == len(paper_list):
         raise ValueError("No papers in specified redshift and/or delta squared range.")
@@ -666,7 +719,7 @@ def make_plot(
     leg = plt.legend(
         lines,
         legend_names,
-        bbox_to_anchor=(0.45, legend_height_norm / 2.0),
+        bbox_to_anchor=(0.48, legend_height_norm / 2.0),
         loc="center",
         bbox_transform=fig.transFigure,
         ncol=leg_columns,
@@ -739,18 +792,17 @@ if __name__ == "__main__":
         help="Linewidths for theory lines.",
     )
     parser.add_argument(
-        "--file",
-        type=str,
-        dest="filename",
-        help="Filename to save plot to.",
-        default="eor_limits.pdf",
+        "--no_theory_legend",
+        action="store_true",
+        help="Flag to exclude theory lines from the legend. Used by some users who "
+        "prefer to add the annotations on the lines by hand to improve readability.",
     )
     parser.add_argument(
         "--aspoints",
         type=str,
         nargs="+",
         default=["patil_2017", "mertens_2020"],
-        help="Papers to plot as points rather than lines.",
+        help="Papers to plot as points rather than lines to help simplify the plot.",
     )
     parser.add_argument(
         "--range",
@@ -815,6 +867,13 @@ if __name__ == "__main__":
     parser.add_argument("--fontsize", type=int, help="Font size to use.", default=15)
     parser.add_argument('--height-ratio', type=float, help='defines the height of the figure', default=None)
     parser.add_argument('--markersize', type=int, default=150, help='size of the markers')
+    parser.add_argument(
+        "--file",
+        type=str,
+        dest="filename",
+        help="Filename to save plot to.",
+        default="eor_limits.pdf",
+    )
     args = parser.parse_args()
 
     if args.shade_limits == "False":
@@ -915,6 +974,7 @@ if __name__ == "__main__":
     fig, ax = make_plot(
         papers=args.papers,
         include_theory=not args.no_theory,
+        theory_legend=not args.no_theory_legend,
         theory_params=theory_params,
         plot_as_points=args.aspoints,
         delta_squared_range=args.range,
