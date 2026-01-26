@@ -8,10 +8,10 @@ yaml files in the data folder, so adding new data or theory lines is as simple
 as putting the data in a yaml file and placing it in the data directory.
 
 We aim to continually update the repository to include all published limits in the field.
-The goal is to make it easier for experimentalists and theorists to add their own data 
+The goal is to make it easier for experimentalists and theorists to add their own data
 or simulations and quickly compare on a 'standard' plot.
 
-This code snippet is fully open source (BSD). Feel free to use the resulting plots in 
+This code snippet is fully open source (BSD). Feel free to use the resulting plots in
 papers or presentations as you see fit.
 
 We show a sample plot below, the appearence is highly customizable through keywords.
@@ -33,7 +33,7 @@ on the github repository.
 Clone the repository using
 ```git clone https://github.com/EoRImaging/eor_limits```
 
-For a simple user installation, change directories into the `eor_limits` folder and 
+For a simple user installation, change directories into the `eor_limits` folder and
 run ```pip install .``` (including the dot).
 
 To install without dependencies, run `pip install --no-deps .` (including the dot).
@@ -60,7 +60,7 @@ or with `uv`:
 
 ```uv sync --all-extras```
 
-To use pre-commit to prevent committing code that does not follow our style, you'll 
+To use pre-commit to prevent committing code that does not follow our style, you'll
 need to run `pre-commit install` in the top level `eor_limits` directory.
 
 # Making plots
@@ -74,7 +74,7 @@ plot (including all the papers in the data folder). There are a number of
 options to customize the plot, use ```eor-limits plot --help```
 to see the various options.
 
-For example, ```eor-limits plot --bold barry_2019 kolopanis_2019 li_2019``` would 
+For example, ```eor-limits plot --bold barry_2019 kolopanis_2019 li_2019``` would
 bold the references to the papers published in 2019.
 
 
@@ -88,4 +88,3 @@ from eor_limits import plots
 plots.make_plot()
 ```
 and the plot should appear inline.
-
