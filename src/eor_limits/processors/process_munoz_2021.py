@@ -49,7 +49,7 @@ def get_munoz_2021_line(model="EOS", redshift=None, linewidth=1.0):
         munoz_file_z = d / "600Mpc_pt0_coeval_pow_zlist.bin"
         munoz_file_p21 = d / "600Mpc_pt0_coeval_pow_P21.bin"
 
-        paper_dict["linestyle"] = "dashdotted"
+        paper_dict["linestyle"] = "dashdot"
         paper_dict["model"] = "AllGalaxies (OPT)"
 
     redshifts = np.fromfile(munoz_file_z)

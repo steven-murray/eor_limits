@@ -1,8 +1,10 @@
 """Module defining a plotting function for EoR limits vs k and redshift."""
 
 import copy
+import logging
 from typing import Any
 
+import h5py
 import matplotlib.cm as cmx
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
@@ -11,6 +13,8 @@ import numpy as np
 from eor_limits.data import KNOWN_PAPERS, KNOWN_THEORIES
 
 from ..datatypes import read_data_yaml
+
+logger = logging.getLogger(__name__)
 
 default_theory_params = {
     "munoz_2021_AllGalaxies_z8.5": {
@@ -64,6 +68,12 @@ def make_plot(
     linewidths: dict | None = None,
     bold_papers: list[str] | None = None,
     fontsize: int = 15,
+    markersize: int = 150,
+    fig_ratio: float | None = None,
+    sensitivities: dict | None = None,
+    sensitivity_style: dict | None = None,
+    fig: plt.Figure | None = None,
+    ax: plt.Axes | None = None,
 ) -> plt.Figure:
     """
     Plot the current EoR Limits as a function of k and redshift.
@@ -125,7 +135,24 @@ def make_plot(
         Font size to use on plot.
     plot_filename : str
         File name to save plot to.
-
+    fig, ax
+        The matplotlib figure and axis on which to draw the plot. If not given, will
+        create one for you.
+    markersize : int
+        Size of the markers to use for point plots.
+    fig_ratio : float
+        Ratio of figure height to width. If None, defaults to 0.5 if theory is not
+        included, and 1 if theory is included.
+    sensitivities : dict
+        Dictionary of sensitivities to plot on the figure. The keys are labels for each
+        sensitivity estimate, and the values are the file names of the
+        sensitivities to plot, which must be outputs from 21cmSense v2+.
+    sensitivity_style : dict
+        Dictionary of style parameters for plotting sensitivities. The keys are
+        labels for each sensitivity estimate, and the values are dictionaries with
+        style parameters for plotting, e.g. {'color': 'k', 'ls': '--', 'lw': 3}.
+        An additional key 'sensitivity_kind' can be used to specify which kind of
+        sensitivity to plot, e.g. 'sample+thermal', 'sample' or 'thermal'.
     """
     if plot_as_points is None:
         plot_as_points = ["patil_2017", "mertens_2020"]
@@ -167,34 +194,21 @@ def make_plot(
     if include_theory:
         theory_paper_list = load_theory_data(theory_params)
 
-    if redshift_range is not None:
-        if len(redshift_range) != 2:
-            raise ValueError(
-                "redshift range must have 2 elements with the second element greater "
-                "than the first element."
-            )
-        if redshift_range[0] >= redshift_range[1]:
-            raise ValueError(
-                "redshift range must have 2 elements with the second element greater "
-                "than the first element."
-            )
-
-        norm = colors.Normalize(vmin=redshift_range[0], vmax=redshift_range[1])
-    else:
-        redshift_list = determine_redshifts(delta_squared_range, k_range, paper_list)
-
-        if np.min(redshift_list) < np.max(redshift_list):
-            redshift_range_use = [redshift_list[0], redshift_list[-1]]
-        else:
-            # if only 1 redshift and no range specified, use a range of 2 centered on
-            # redshift of data.
-            redshift_range_use = [redshift_list[0] - 1, redshift_list[0] + 1]
-
-        norm = colors.Normalize(vmin=redshift_range_use[0], vmax=redshift_range_use[1])
+    norm = set_cmap_norm_via_zrange(
+        delta_squared_range, redshift_range, k_range, paper_list
+    )
     scalar_map = cmx.ScalarMappable(norm=norm, cmap=colormap)
 
-    fig_height = 20 if include_theory else 10
     fig_width = 25 if theory_legend else 20
+    if include_theory:
+        fig_height = fig_width * (fig_ratio or 1)
+    else:
+        fig_height = fig_width * (fig_ratio or 0.5)
+
+    if fig is None or ax is None:
+        fig = plt.figure(figsize=(fig_width, fig_height))
+    elif ax is not None:
+        plt.sca(ax)
 
     fig = plt.figure(figsize=(fig_width, fig_height))
     legend_names, lines, paper_ks, skipped_papers = plot_limit_papers(
@@ -206,6 +220,7 @@ def make_plot(
         paper_list,
         norm,
         scalar_map,
+        markersize=markersize,
     )
 
     if len(skipped_papers) == len(paper_list):
@@ -225,6 +240,8 @@ def make_plot(
 
     point_size = 1 / 72.0  # typography standard (points/inch)
     font_inch = fontsize * point_size
+
+    plot_sensitivities(fontsize, sensitivities, sensitivity_style)
 
     plt.rcParams.update({"font.size": fontsize})
     plt.xlabel(r"k ($h Mpc^{-1}$)", fontsize=fontsize)
@@ -252,7 +269,13 @@ def make_plot(
     cb.set_label(label="Redshift", fontsize=fontsize)
     plt.grid(axis="y")
 
-    leg_columns = 2 if fontsize > 20 else 3
+    if fontsize > 25:
+        leg_columns = 1
+    elif fontsize > 20:
+        leg_columns = 2
+    else:
+        leg_columns = 3
+
     leg_rows = int(np.ceil(len(legend_names) / leg_columns))
 
     legend_height = (2 * leg_rows) * font_inch
@@ -279,6 +302,85 @@ def make_plot(
     plt.subplots_adjust(bottom=plot_bottom)
     fig.tight_layout()
     return fig
+
+
+def set_cmap_norm_via_zrange(delta_squared_range, redshift_range, k_range, paper_list):
+    """Set the colormap normalization based on redshift range."""
+    if redshift_range is not None:
+        if len(redshift_range) != 2:
+            raise ValueError(
+                "redshift range must have 2 elements with the second element greater "
+                "than the first element."
+            )
+        if redshift_range[0] >= redshift_range[1]:
+            raise ValueError(
+                "redshift range must have 2 elements with the second element greater "
+                "than the first element."
+            )
+
+        norm = colors.Normalize(vmin=redshift_range[0], vmax=redshift_range[1])
+    else:
+        redshift_list = determine_redshifts(delta_squared_range, k_range, paper_list)
+
+        if np.min(redshift_list) < np.max(redshift_list):
+            redshift_range_use = [redshift_list[0], redshift_list[-1]]
+        else:
+            # if only 1 redshift and no range specified, use a range of 2 centered on
+            # redshift of data.
+            redshift_range_use = [redshift_list[0] - 1, redshift_list[0] + 1]
+
+        norm = colors.Normalize(vmin=redshift_range_use[0], vmax=redshift_range_use[1])
+    return norm
+
+
+def plot_sensitivities(fontsize, sensitivities, sensitivity_style):
+    """Plot the sensitivity curves."""
+    sensitivity_style = sensitivity_style or {}
+    sensitivities = sensitivities or {}
+    for indx, (name, fname) in enumerate(sensitivities.items()):
+        # Set the style.
+        if name in sensitivity_style:
+            style = sensitivity_style[name]
+        else:
+            style = sensitivity_style
+
+        sense_kind = style.get("sensitivity_kind", "sample+thermal")
+
+        if sense_kind not in ["sample+thermal", "sample", "thermal"]:
+            raise ValueError(
+                f"Invalid sensitivity kind '{sense_kind}' for {name}. "
+                "Must be one of 'sample+thermal', 'sample', or 'thermal'."
+            )
+
+        # These must be outputs from 21cmSense v2+
+        with h5py.File(fname, "r") as fl:
+            if "k" not in fl:
+                raise ValueError(
+                    f"{fname} is not a valid 21cmSense output: no key 'k' found"
+                )
+            if sense_kind not in fl:
+                raise OSError(f"{fname} has no key {sense_kind} for sensitivity data. ")
+            ks = fl["k"][:]
+            sense = fl[sense_kind][:]
+
+        ks = ks[~np.isinf(sense)]
+        sense = sense[~np.isinf(sense)]
+
+        plt.plot(
+            ks,
+            sense,
+            color=style.get("color", "k"),
+            ls=style.get("ls", ["--", ":", "-."][indx % 3]),
+            lw=style.get("lw", [3, 2, 4][indx // 3]),
+        )
+
+        # Put the instrument name right on the plot.
+        # We know the sensitivity will go up to the right, so we put it at about 2/3
+        # of the way, and align it to top.
+        k_ind = int(len(ks) * (0.8 - 0.1 * indx))
+        plt.text(
+            ks[k_ind], sense[k_ind], name, fontsize=fontsize, verticalalignment="top"
+        )
 
 
 def plot_theory_lines(
@@ -356,6 +458,7 @@ def plot_limit_papers(
     paper_list,
     norm,
     scalar_map,
+    markersize=150,
 ):
     """Plot limit papers on the current plot."""
     legend_names = []
@@ -363,6 +466,7 @@ def plot_limit_papers(
     paper_ks = []
     skipped_papers = []
     for paper in paper_list:
+        logger.info("Processing %s %s", paper["author"], paper["year"])
         label_start = " $\\bf{" if paper["bold"] else " $\\rm{"
         label_end = "}$"
         label = (
@@ -386,6 +490,7 @@ def plot_limit_papers(
                 norm,
                 paper,
                 label,
+                markersize=markersize,
             )
         else:
             skip_this_paper, these_ks, line = plot_limit_paper_lines(
@@ -398,6 +503,7 @@ def plot_limit_papers(
                 scalar_map,
                 paper,
                 label,
+                markersize=markersize,
             )
 
         if skip_this_paper:
@@ -420,6 +526,7 @@ def plot_limit_paper_lines(
     scalar_map,
     paper,
     label,
+    markersize=150,
 ):
     """Plot a limit paper with line data on the current plot."""
     skip_this_paper = False
@@ -446,6 +553,10 @@ def plot_limit_paper_lines(
         lines_use = np.arange(len(redshifts))
 
     if lines_use.size > 0:
+        logger.info(
+            f"Using {len(lines_use)} point%s.", "s" if len(lines_use) > 1 else ""
+        )
+
         if len(paper_redshifts) > 0 and paper["name"] in paper_redshifts:
             redshift_array = np.asarray(redshifts)
             new_lines_use = [
@@ -455,13 +566,19 @@ def plot_limit_paper_lines(
             ]
             lines_use = np.array(new_lines_use, dtype=int)
 
-        for ind in lines_use:
-            redshift = np.asarray(redshifts)[ind]
+        logger.info(f"Using {len(lines_use)} point{'s' if len(lines_use) > 1 else ''}.")
+
+        for ind, redshift in enumerate(np.asarray(redshifts)[lines_use]):
             these_ks = k_vals[ind]
 
+            # Some lines have overlapping edges (since window functions can overlap)
+            # That looks ugly, so we make sure we meet towards the right.
+            max_right_edges = np.concatenate((k_vals[ind][1:], [np.inf]))
+            min_left_edges = np.concatenate(([0], max_right_edges[:-1]))
+
             k_edges = np.stack((
-                np.asarray(k_lower[ind]),
-                np.asarray(k_upper[ind]),
+                np.maximum(np.asarray(k_lower[ind]), min_left_edges),
+                np.minimum(np.asarray(k_upper[ind]), max_right_edges),
             )).T.flatten()
             delta_edges = np.stack((
                 np.asarray(delta_squared[ind]),
@@ -527,6 +644,12 @@ def plot_limit_paper_lines(
                 out_ks = these_ks
 
     else:
+        logger.info(
+            ";  skipped since its outside redshift/delta^2 range ["
+            f"{redshift_range[0]} < z < {redshift_range[1]}] & ["
+            f"{delta_squared_range[0]:1.0e} < Δ² < "
+            f"{delta_squared_range[1]:1.0e}]"
+        )
         skip_this_paper = True
         line = None
         out_ks = []
@@ -543,6 +666,7 @@ def plot_limit_paper_as_points(
     norm,
     paper,
     label,
+    markersize=150,
 ):
     """Plot a limit paper with point data on the current plot."""
     skip_this_paper = False
@@ -553,6 +677,13 @@ def plot_limit_paper_as_points(
     delta_squared = np.asarray(paper["delta_squared"])
     if redshift_range is not None:
         redshift_array = np.asarray(paper["redshift"])
+        if len(redshift_array) != len(delta_squared):
+            raise ValueError(
+                f"Paper {paper['author']} ({paper['year']}) has "
+                f"{len(redshift_array)} redshifts, but {len(delta_squared)} "
+                "power spectrum values!"
+            )
+
         points_use = np.where(
             (redshift_array >= redshift_range[0])
             & (redshift_array <= redshift_range[1])
@@ -575,6 +706,9 @@ def plot_limit_paper_as_points(
         points_use = np.array(new_points_use, dtype=int)
 
     if points_use.size > 0:
+        plural = len(points_use) > 1
+        logger.info(f"Using {len(points_use)} point{'s' if plural > 1 else ''}.")
+
         these_ks = list(np.asarray(paper["k"])[points_use])
 
         delta_squared = np.asarray(paper["delta_squared"])[points_use]
@@ -587,7 +721,7 @@ def plot_limit_paper_as_points(
             norm=norm,
             edgecolors="black",
             label=label,
-            s=150,
+            s=markersize,
             zorder=10,
         )
         if shade_limits:
@@ -619,6 +753,20 @@ def plot_limit_paper_as_points(
                     zorder=zorder,
                 )
     else:
+        if redshift_range is None:
+            logger.info(
+                ";  skipped since its outside delta^2 range "
+                f"[{delta_squared_range[0]:1.0e} < Δ² < "
+                f"{delta_squared_range[1]:1.0e}]"
+            )
+        else:
+            logger.info(
+                ";  skipped since its outside redshift/delta^2 range "
+                f"[{redshift_range[0]} < z < {redshift_range[1]}] & "
+                f"[{delta_squared_range[0]:1.0e} < Δ² < "
+                f"{delta_squared_range[1]:1.0e}]"
+            )
+
         skip_this_paper = True
         these_ks = []
         line = None
