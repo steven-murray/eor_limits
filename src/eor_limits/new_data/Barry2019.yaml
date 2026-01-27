@@ -2,7 +2,7 @@ telescope: MWA
 author: Barry
 year: 2019
 doi: 10.3847/1538-4357/ab40a8
-notes: 
+notes:
     - The k_lower and k_upper values are calculated by assuming linear binning. Not authoritative
 
 data:
@@ -33,4 +33,4 @@ data:
     z: [7]
     z_lower:
     z_upper:
-    z_tags: 
+    z_tags:
