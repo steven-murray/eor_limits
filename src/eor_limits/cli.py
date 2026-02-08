@@ -5,11 +5,10 @@
 
 import json
 from pathlib import Path
-from typing import Literal
 
 from cyclopts import App
 
-from .plots.plot_vs_k_z import default_theory_params, make_plot
+from .plots.plot_vs_k_z import make_plot
 
 app = App()
 
@@ -17,26 +16,26 @@ app = App()
 @app.command
 def plot(
     papers=None,
-    theory: bool = True,
     theory_legend: bool = True,
     theories: list[str] = None,
     theory_model: str = None,
     theory_nf: list[float] = None,
     theory_redshift: list[float] = None,
     theory_linewidth: list[float] = None,
-    aspoints: list[str] = ("patil_2017", "mertens_2020"),
     dsq_range: tuple[float, float] = None,
     z_range: tuple[float, float] = None,
     k_range: tuple[float, float] = None,
-    shade_limits: Literal["generational", "alpha", "none"] = "generational",
-    shade_theory: Literal["flat", "alpha", "none"] = "flat",
+    shade_limits: float = 0.5,
+    shade_theory: float | None = None,
     colormap: str = "Spectral_r",
     bold_papers: list[str] = None,
     fontsize: int = 15,
     sensitivities: list[tuple[str, str]] = None,
     sensitivity_style: list[tuple[str, str]] = None,
     height_ratio: float = None,
-    markersize: int = 150,
+    nk_for_lines: int = 10,
+    aspoints: list[str] = None,
+    aslines: list[str] = None,
     out: Path = Path("eor_limits.pdf"),
 ):
     """
@@ -47,8 +46,6 @@ def plot(
     papers
         Papers to include on plot (must be in data directory). Defaults to all papers
         in the data directory.
-    theory
-        Whether to include theory lines on the plot.
     theory_legend
         Whether to exclude theory lines from the legend. Used by some users who
         prefer to add the annotations on the lines by hand to improve readability.
@@ -64,8 +61,6 @@ def plot(
         Redshifts to select from theories.
     theory_linewidth
         Linewidths for theory lines.
-    aspoints
-        Papers to plot as points rather than lines to help simplify the plot.
     dsq_range
         Range of Delta Squared to include on plot (yaxis range).
     z_range
@@ -75,7 +70,8 @@ def plot(
     shade_limits
         Type of shading above limits to apply.
     shade_theory
-        Type of shading below theories to apply.
+        An alpha value to use for shading below theory lines. By default, choose
+        a shading such that when all theories overlap, it becomes opaque.
     colormap
         Matplotlib colormap to use.
     bold_papers
@@ -99,25 +95,23 @@ def plot(
         style is given, the default style will be used.
     height_ratio
         Height to width ratio of the figure.
-    markersize
-        Size of the markers for points.
-    """
-    if shade_limits == "none":
-        shade_limits = False
-    if shade_theory == "none":
-        shade_theory = False
+    nk_for_lines
+        Number of k values required to plot a line instead of markers for a given
+        limit.
+    aspoints
+        List of papers to plot as points instead of lines. By default, all limits with
+        more than nk_for_lines k values will be plotted as lines, and the rest as
+        points.
+    aslines
+        List of papers to plot as lines instead of points. By default, all limits with
+        more than nk_for_lines k values will be plotted as lines, and the rest as
+        points.
 
+    """
     if theories is not None:
         theories, theory_model, theory_nf, theory_redshift = parse_theories(
             theories, theory_model, theory_nf, theory_redshift, theory_linewidth
         )
-    else:
-        if theory_nf or theory_redshift or theory_model:
-            raise ValueError(
-                "You passed a theory nf/redshift/model but no theory itself!"
-            )
-
-        theory_params = default_theory_params
 
     # Process sensitivity arguments.
     if sensitivities:
@@ -128,22 +122,22 @@ def plot(
 
     fig = make_plot(
         papers=papers,
-        include_theory=theories is not None and theories != [],
+        theories=theories,
         theory_legend=theory_legend,
-        theory_params=theory_params,
-        plot_as_points=aspoints,
         delta_squared_range=dsq_range,
         redshift_range=z_range,
         k_range=k_range,
         shade_limits=shade_limits,
-        shade_theory=shade_theory,
+        shade_theory_alpha=shade_theory,
         colormap=colormap,
         bold_papers=bold_papers,
         fontsize=fontsize,
         sensitivities=sensitivities,
         sensitivity_style=sensitivity_style,
-        markersize=markersize,
         fig_ratio=height_ratio,
+        nk_for_lines=nk_for_lines,
+        aspoints=aspoints,
+        aslines=aslines,
     )
     fig.savefig(out)
 
