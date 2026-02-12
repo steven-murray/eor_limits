@@ -3,14 +3,15 @@
 from pathlib import Path
 
 from eor_limits._datatypes import DataSet
-from eor_limits.theory import THEORY_PATH, KNOWN_THEORIES, __all_theories__
 from eor_limits.data import DATA_PATH, KNOWN_LIMITS
+from eor_limits.theory import KNOWN_THEORIES, __all_theories__
 
 __all___ = [
     "load_theory_model",
     "load_limit_data",
     "_normalize_dataset_name",
 ]
+
 
 def load_theory_model(name: str) -> DataSet:
     """Get the theory data processor for a given theory name."""

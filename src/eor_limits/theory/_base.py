@@ -7,8 +7,9 @@ from eor_limits._datatypes import Data, DataSet
 
 # Import paths and theory registry
 THEORY_PATH = Path(__file__).parent.resolve()
-KNOWN_THEORIES = {} # populated in __init__.py
-__all_theories__ = {} # populated in __init__.py
+KNOWN_THEORIES = {}  # populated in __init__.py
+__all_theories__ = {}  # populated in __init__.py
+
 
 class BaseTheoryProcessor(ABC):
     """Abstract base class for theory processors."""

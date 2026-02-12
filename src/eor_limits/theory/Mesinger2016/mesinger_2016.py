@@ -4,10 +4,10 @@
 """Process Mesinger et al. 2016 EOS spectra for plotting."""
 
 from pathlib import Path
+
 import numpy as np
 
 from eor_limits._datatypes import Data
-
 from eor_limits.theory._base import THEORY_PATH, BaseTheoryProcessor
 
 faint_path = THEORY_PATH / "Mesinger2016" / "faint_galaxies/"

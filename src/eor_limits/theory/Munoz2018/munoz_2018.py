@@ -4,10 +4,10 @@ import numpy as np
 import yaml
 
 from eor_limits._datatypes import Data
-
 from eor_limits.theory._base import THEORY_PATH, BaseTheoryProcessor
 
 munoz_fdm3_path = THEORY_PATH / "Munoz2018" / "munoz_2018_fdm3.yaml"
+
 
 class Munoz2018FDM3(BaseTheoryProcessor):
     """Processor for Muñoz 2018 Mini-Charged DM model with f_DM=0.3."""

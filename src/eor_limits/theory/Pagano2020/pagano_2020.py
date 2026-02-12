@@ -6,11 +6,10 @@
 import numpy as np
 
 from eor_limits._datatypes import Data
-
 from eor_limits.theory._base import THEORY_PATH, BaseTheoryProcessor
 
 # all betas are in the same file, so just load one of them to get the path
-pagano_file = THEORY_PATH / "Pagano2020"/ "pagano_liu_2020.npz"
+pagano_file = THEORY_PATH / "Pagano2020" / "pagano_liu_2020.npz"
 
 # load all possible betas
 with np.load(pagano_file) as data:
