@@ -1,6 +1,8 @@
 """Module defining a plotting function for EoR limits vs k and redshift."""
 
 
+import logging
+from itertools import chain
 from typing import Any, Annotated
 from pathlib import Path
 
@@ -252,7 +254,7 @@ def make_plot(
     
     # Whether to bold each theory in the legend
     bold_theories = bold_theories or [] # equivalent to: if bold_theories is None: bold_theories = []
-    theory_labels = [get_latex_theory_label(theory) for theory in theories]
+    theory_labels = [get_latex_theory_label(theory, bold=(theory.key in bold_theories)) for theory in theories]
     
     # Plotting the theory lines.
     theory_lines = plot_theories(
@@ -265,6 +267,9 @@ def make_plot(
     
     ###################################################################################
     # SENSITIVITIES
+    
+    # If sensitivities are specified, build styles and plot them.
+    sensitivities = sensitivities or {} # equivalent to: if sensitivities is None: sensitivities = {}
 
     # Build styles for sensitivity lines, applying any overrides specified by the user.
     sensitivity_style = build_sensitivity_styles(sensitivities, sensitivity_style)
@@ -326,9 +331,8 @@ def make_plot(
     
     if out is not None:
         fig.savefig(out)
-        return None
-    else:
-        return fig
+        
+    return fig
 
 
 def select_k_and_z_ranges(
@@ -511,7 +515,7 @@ def get_latex_limit_label(paper: DataSet, bold: bool = False) -> str:
 
 def get_latex_theory_label(paper: DataSet, bold: bool = False) -> str:
     """Get a LaTeX label for a theory paper."""
-    label_start = " $\\bf{Theory:" if bold else " $\\bf{Theory:} \\rm{"
+    label_start = " $\\bf{Theory:} \\bf{" if bold else " $\\bf{Theory:} \\rm{"
     label_end = "}$"
     return (
         label_start
@@ -575,7 +579,7 @@ def plot_limits(
             ):
                 color_use = "grey"
                 zorder = 0
-                alpha = 0.5
+                alpha = shade_limits
 
                 for klow, khi, dsq in zip(
                     limit.data.k_lower,
@@ -676,6 +680,9 @@ def plot_theories(
     
     lines = []
     
+    if shade_theories is None:
+        shade_theories = 1.0 / len(theories)
+    
     for theory, label in zip(theories, theory_labels):
         
         logging.getLogger("eor_limits").info(
@@ -687,12 +694,11 @@ def plot_theories(
         (line,) = plt.plot(
             theory.data.k[0],
             theory.data.delta_squared[0],
+            label=label,
             zorder=2,
             **theory_style
         )
         
-        if shade_theories is None:
-            shade_theories = 1.0 / len(theories)
         if shade_theories:
             color_use = theory_style["color"]
             zorder = 0
