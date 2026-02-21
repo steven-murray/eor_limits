@@ -223,10 +223,14 @@ class DataSet:
         default=(), validator=attrs.validators.instance_of(tuple)
     )
     _key: str = attrs.field(default="")
-    
+
     def __attrs_post_init__(self) -> None:
         """Initialize computed fields after all other fields are set."""
-        author = self.author.split()[0] if "collaboration" in self.author.lower() else self.author
+        author = (
+            self.author.split()[0]
+            if "collaboration" in self.author.lower()
+            else self.author
+        )
         year = str(self.year)
         object.__setattr__(self, "_key", f"{author}{year}")
 
