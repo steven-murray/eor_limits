@@ -5,7 +5,7 @@ Copyright (c) 2019 Nichole Barry, Bryna Hazelton
 Licensed under the 2-clause BSD License
 """
 
-from ._datatypes import DataSet
+from ._datatypes import Data, DataSet
 from ._loading import (
     load_limit_data,
     load_theory_model,
@@ -17,6 +17,7 @@ from .theory import KNOWN_THEORIES
 __all__ = [
     "KNOWN_LIMITS",
     "KNOWN_THEORIES",
+    "Data",
     "DataSet",
     "load_limit_data",
     "load_theory_model",
