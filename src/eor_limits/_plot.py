@@ -12,8 +12,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from cyclopts import Parameter
 
+from ._data_loading import load_limit_data, load_theory_model
 from ._datatypes import DataSet
-from ._loading import load_theory_model
 from .data import KNOWN_LIMITS
 
 DEFAULT_TELESCOPE_MARKERS = {
@@ -176,10 +176,10 @@ def make_plot(
     # Load data for limits and sort by year.
     if limits is None:
         limits = list(KNOWN_LIMITS.keys())
-        limits = [DataSet.load(limit).drop_nan() for limit in limits]
+        limits = [load_limit_data(limit).drop_nan() for limit in limits]
         limits.sort(key=lambda limit: limit.year)
     else:
-        limits = [DataSet.load(limit).drop_nan() for limit in limits]
+        limits = [load_limit_data(limit).drop_nan() for limit in limits]
 
     # Select the specified k and z ranges from the limits
     def _get_z_range_from_limits(limits):
