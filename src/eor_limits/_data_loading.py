@@ -14,7 +14,21 @@ __all___ = [
 
 
 def load_theory_model(name: str) -> DataSet:
-    """Get the theory data processor for a given theory name."""
+    """
+    Load a theory model from the known theories.
+
+    Parameters
+    ----------
+    name : str
+        The name of the theory model to load
+        (see ``KNOWN_THEORIES`` for available models).
+
+    Returns
+    -------
+    DataSet
+        The loaded theory model as a DataSet object.
+
+    """
     if name not in KNOWN_THEORIES:
         raise ValueError(
             f"Theory '{name}' not found. Available theories: {KNOWN_THEORIES.keys()}"
