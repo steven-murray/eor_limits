@@ -14,22 +14,8 @@ __all___ = [
 
 
 def load_theory_model(name: str) -> DataSet:
-    """
-    Load a theory model from the known theories.
-
-    Parameters
-    ----------
-    name : str
-        The name of the theory model to load
-        (see ``KNOWN_THEORIES`` for available models).
-
-    Returns
-    -------
-    DataSet
-        The loaded theory model as a DataSet object.
-
-    """
-    if name not in KNOWN_THEORIES or name not in __all_theories__:
+    """Get the theory data processor for a given theory name."""
+    if name not in KNOWN_THEORIES:
         raise ValueError(
             f"Theory '{name}' not found. Available theories: {KNOWN_THEORIES.keys()}"
         )
@@ -54,7 +40,7 @@ def load_limit_data(name: str | Path) -> DataSet:
     return DataSet.load(name)
 
 
-def _normalize_dataset_name(path: str | Path) -> Path:
+def _normalize_dataset_name(path: str | Path, /) -> Path:
     if isinstance(path, str) and not path.endswith(".yaml"):
         path = DATA_PATH / (path + ".yaml")
     elif isinstance(path, str):

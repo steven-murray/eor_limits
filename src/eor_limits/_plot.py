@@ -12,8 +12,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from cyclopts import Parameter
 
+from ._data_loading import load_limit_data, load_theory_model
 from ._datatypes import DataSet
-from ._loading import load_theory_model
 from .data import KNOWN_LIMITS
 
 DEFAULT_TELESCOPE_MARKERS = {
@@ -25,7 +25,12 @@ DEFAULT_TELESCOPE_MARKERS = {
 }
 
 
-def make_plot(
+def plot_vs_z(*args, **kwargs):
+    """Plot 21-cm power spectrum limits as a function of redshift, z [TBD]."""
+    raise NotImplementedError("This function is not yet implemented. Stay tuned!")
+
+
+def plot_vs_k(
     # Limit plotting options
     limits: list[str] | None = None,
     base_limit_style: dict[str, Any] | None = None,
@@ -59,7 +64,7 @@ def make_plot(
     out: str | Path | None = None,
 ) -> plt.Figure:
     """
-    Plot the current EoR Limits as a function of k and redshift.
+    Plot 21-cm power spectrum limits as a function of scale, k.
 
     Parameters
     ----------
@@ -182,10 +187,10 @@ def make_plot(
     # Load data for limits and sort by year.
     if limits is None:
         limits = list(KNOWN_LIMITS.keys())
-        limits = [DataSet.load(limit).drop_nan() for limit in limits]
+        limits = [load_limit_data(limit).drop_nan() for limit in limits]
         limits.sort(key=lambda limit: limit.year)
     else:
-        limits = [DataSet.load(limit).drop_nan() for limit in limits]
+        limits = [load_limit_data(limit).drop_nan() for limit in limits]
 
     # Select the specified k and z ranges from the limits
     def _get_z_range_from_limits(limits):
@@ -231,9 +236,7 @@ def make_plot(
     )
 
     # Whether to bold each limit in the legend
-    bold_limits = (
-        bold_limits or []
-    )  # equivalent to: if bold_limits is None: bold_limits = []
+    bold_limits = bold_limits or []
     limit_labels = [
         get_latex_limit_label(limit, bold=(limit.key in bold_limits))
         for limit in limits
@@ -254,14 +257,12 @@ def make_plot(
     # THEORY MODELS
 
     # Loading data for theories
-    theories = theories or []  # equivalent to: if theories is None: theories = []
+    theories = theories or []
     theories = [load_theory_model(theory) for theory in theories]
 
     # Downselecting to specified redshifts for theories,
     # or closest redshift to centre of redshift range if no redshifts specified.
-    theory_redshifts = (
-        theory_redshifts or {}
-    )  # equivalent to: if theory_redshifts is None: theory_redshifts = {}
+    theory_redshifts = theory_redshifts or {}
     new_theories = []
     for theory in theories:
         if theory.key not in theory_redshifts:
@@ -275,9 +276,7 @@ def make_plot(
     theory_styles = build_theory_styles(theories, base_theory_style, theory_styles)
 
     # Whether to bold each theory in the legend
-    bold_theories = (
-        bold_theories or []
-    )  # equivalent to: if bold_theories is None: bold_theories = []
+    bold_theories = bold_theories or []
     theory_labels = [
         get_latex_theory_label(theory, bold=(theory.key in bold_theories))
         for theory in theories
@@ -296,9 +295,7 @@ def make_plot(
     # SENSITIVITIES
 
     # If sensitivities are specified, build styles and plot them.
-    sensitivities = (
-        sensitivities or {}
-    )  # equivalent to: if sensitivities is None: sensitivities = {}
+    sensitivities = sensitivities or {}
 
     # Build styles for sensitivity lines, applying any overrides specified by the user.
     sensitivity_style = build_sensitivity_styles(sensitivities, sensitivity_style)
@@ -452,8 +449,8 @@ def build_limit_styles(
     overrides: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Build a dictionary of styles to use for each limit paper."""
-    aspoints = aspoints or []  # equivalent to: if aspoints is None: aspoints = []
-    aslines = aslines or []  # equivalent to: if aslines is None: aslines = []
+    aspoints = aspoints or []
+    aslines = aslines or []
     styles = {}
     for limit in limits:
         style = {}

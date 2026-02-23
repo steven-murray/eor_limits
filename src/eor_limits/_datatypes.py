@@ -281,19 +281,12 @@ class DataSet:
     notes: tuple[str, ...] = attrs.field(
         default=(), validator=attrs.validators.instance_of(tuple)
     )
-    _key: str = attrs.field(default="")
+    _key: str = attrs.field(default="", converter=str)
 
     def __attrs_post_init__(self) -> None:
-        """Initialize computed fields after all other fields are set."""
-        if self._key:
-            return  # if already set, skip (e.g. when evolving)
-        author = (
-            self.author.split()[0]
-            if "collaboration" in self.author.lower()
-            else self.author
-        )
-        year = str(self.year)
-        object.__setattr__(self, "_key", f"{author}{year}")
+        """Populate _key if it was not explicitly provided."""
+        if not self._key:
+            object.__setattr__(self, "_key", f"{self.author}{self.year}")
 
     def __repr__(self) -> str:
         """Return a string representation of the DataSet, including metadata."""
@@ -313,7 +306,7 @@ class DataSet:
     @classmethod
     def load(cls, path: str | Path, /) -> Self:
         """Load a DataSet from a YAML file or a known dataset name."""
-        from ._loading import _normalize_dataset_name
+        from ._data_loading import _normalize_dataset_name
 
         path = _normalize_dataset_name(path)
 
