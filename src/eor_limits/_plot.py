@@ -36,25 +36,25 @@ def plot_vs_z(*args, **kwargs):
 
 def plot_vs_k(
     # Limit plotting options
-    limits: list[str] | None = None,
+    limits: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
     base_limit_style: dict[str, Any] | None = None,
     limit_styles: dict[str, dict[str, Any]] | None = None,
-    bold_limits: list[str] | None = None,
-    shade_limits: float | None = 0.5,
-    aspoints: list[str] | None = None,
-    aslines: list[str] | None = None,
+    bold_limits: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
+    shade_limits: bool = True,
+    aspoints: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
+    aslines: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
     nk_for_lines: int = 10,
     # Limits selection options
     z_range: tuple[float, float] | None = None,
     k_range: tuple[float, float] | None = None,
     delta_squared_range: tuple[float, float] | None = None,
     # Theory plotting options
-    theories: list[str] | None = None,
+    theories: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
     theory_redshifts: dict[str, list[float]] | None = None,
     base_theory_style: dict[str, Any] | None = None,
     theory_styles: dict[str, dict[str, Any]] | None = None,
-    bold_theories: list[str] | None = None,
-    shade_theories: float | None = 0.5,
+    bold_theories: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
+    shade_theories: bool = True,
     # Sensitivity plotting options
     sensitivities: dict | None = None,
     sensitivity_style: dict | None = None,
@@ -232,7 +232,13 @@ def plot_vs_k(
 
     # Building plotting styles for each limit.
     limit_styles = build_limit_styles(
-        limits, aspoints, aslines, nk_for_lines, base_limit_style, limit_styles
+        limits,
+        aspoints,
+        aslines,
+        nk_for_lines,
+        shade_limits,
+        base_limit_style,
+        limit_styles,
     )
 
     # Whether to bold each limit in the legend
@@ -273,7 +279,9 @@ def plot_vs_k(
     theories = new_theories
 
     # Build styles for theory lines, applying any overrides specified by the user.
-    theory_styles = build_theory_styles(theories, base_theory_style, theory_styles)
+    theory_styles = build_theory_styles(
+        theories, shade_theories, base_theory_style, theory_styles
+    )
 
     # Whether to bold each theory in the legend
     bold_theories = bold_theories or []
@@ -445,6 +453,7 @@ def build_limit_styles(
     aspoints: list[str] | None,
     aslines: list[str] | None,
     nk_for_lines: int,
+    shade_limits: bool,
     base_override: dict[str, Any] | None = None,
     overrides: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
@@ -452,36 +461,36 @@ def build_limit_styles(
     aspoints = aspoints or []
     aslines = aslines or []
     styles = {}
+
     for limit in limits:
+        # Empty
         style = {}
-
-        # Determine whether to plot as points or lines, based on user specifications
-        # and number of k values.
-        if limit.key in aspoints:
-            style["as_line"] = False
-        elif limit.key in aslines:
-            style["as_line"] = True
-        else:
-            maxlen = max(len(k) for k in limit.data.k)
-            if maxlen <= nk_for_lines:
-                style["as_line"] = False
-            else:
-                style["as_line"] = True
-
-        # Set the style, if plotting as points, applying any overrides.
+        # Determine whether to plot as points or lines
+        style["as_line"] = (
+            False
+            if limit.key in aspoints
+            else True
+            if limit.key in aslines
+            else max(len(k) for k in limit.data.k) > nk_for_lines
+        )
+        # Set defaults for points
         if not style["as_line"]:
-            style["s"] = 150
-            style |= base_override if base_override else {}
-            style["marker"] = DEFAULT_TELESCOPE_MARKERS.get(limit.telescope, "o")
-            style |= overrides.get(f"{limit.key}", {}) if overrides else {}
-
-        # Set the style, if plotting as lines, applying any overrides.
+            style.setdefault("s", 150)
+            style.setdefault(
+                "marker", DEFAULT_TELESCOPE_MARKERS.get(limit.telescope, "o")
+            )
+        # Set defaults for lines
         else:
-            style["linewidth"] = 2
-            style["linestyle"] = "-"
-            style |= base_override if base_override else {}
-            style |= overrides.get(f"{limit.key}", {}) if overrides else {}
-
+            style.setdefault("linewidth", 2)
+            style.setdefault("linestyle", "-")
+        # If we are shading the limits
+        if shade_limits:
+            style.setdefault("shade_alpha", 0.5)
+            style.setdefault("shade_color", "grey")
+        # Apply user overrides
+        style |= base_override if base_override else {}
+        style |= overrides.get(f"{limit.key}", {}) if overrides else {}
+        # Add to styles dictionary
         styles[f"{limit.key}"] = style
 
     return styles
@@ -489,19 +498,27 @@ def build_limit_styles(
 
 def build_theory_styles(
     theories: list[DataSet],
+    shade_theories: bool,
     base_override: dict[str, Any] | None = None,
     overrides: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Build a dictionary of styles to use for each theory paper."""
     styles = {}
     for theory in theories:
-        style = {
-            "linewidth": 2,
-            "linestyle": "--",
-            "color": "lightsteelblue",
-        }
+        # Empty
+        style = {}
+        # Set default style parameters for theory lines.
+        style.setdefault("linestyle", "--")
+        style.setdefault("linewidth", 2)
+        style.setdefault("color", "lightsteelblue")
+        # If we are shading the limits
+        if shade_theories:
+            style.setdefault("shade_alpha", 1 / len(theories))
+            style.setdefault("shade_color", "lightsteelblue")
+        # Set base and overrides
         style |= base_override if base_override else {}
         style |= overrides.get(f"{theory.key}", {}) if overrides else {}
+        # Add to styles dictionary
         styles[f"{theory.key}"] = style
     return styles
 
@@ -560,7 +577,7 @@ def plot_limits(
     limits: list[DataSet],
     limit_styles: dict[str, dict[str, Any]],
     limit_labels: list[str],
-    shade_limits: float | None,
+    shade_limits: bool,
     delta_squared_range: tuple[float, float],
     scalar_map: cmx.ScalarMappable,
 ):
@@ -571,10 +588,12 @@ def plot_limits(
         logging.getLogger("eor_limits").info(f"Plotting {limit.author} {limit.year}")
 
         limit_style = limit_styles[limit.key]
-        as_line = limit_style.pop(
-            "as_line"
-        )  # we pop this since it's not a valid argument
-        # for plt.plot or plt.scatter
+
+        # Pop invalid args for plt.plot or plt.scatter
+        as_line = limit_style.pop("as_line")
+        if shade_limits:
+            shade_alpha = limit_style.pop("shade_alpha")
+            shade_color = limit_style.pop("shade_color")
 
         # If we are plotting as points, we plot each redshift with specific colors
         # and making sure to meet towards the right edges to avoid overlaps.
@@ -595,7 +614,7 @@ def plot_limits(
                 dsq,
                 color=scalar_map.to_rgba(z),
                 label=label,
-                zorder=10,
+                zorder=2,
                 **limit_style,
             )
 
@@ -604,10 +623,6 @@ def plot_limits(
                 and limit.data.k_lower is not None
                 and limit.data.k_upper is not None
             ):
-                color_use = "grey"
-                zorder = 0
-                alpha = shade_limits
-
                 for klow, khi, dsq in zip(
                     limit.data.k_lower,
                     limit.data.k_upper,
@@ -620,9 +635,9 @@ def plot_limits(
                         k_edges,
                         delta_edges,
                         delta_squared_range[1],
-                        color=color_use,
-                        alpha=alpha,
-                        zorder=zorder,
+                        color=shade_color,
+                        alpha=shade_alpha,
+                        zorder=0,
                     )
 
         # If we are plotting as lines, we need to flatten the data
@@ -664,28 +679,25 @@ def plot_limits(
                     delta_edges,
                     color="black",
                     linewidth=limit_style["linewidth"] + 2,
-                    zorder=2,
+                    zorder=1,
                 )
 
                 (this_line,) = plt.plot(
                     k_edges,
                     delta_edges,
                     color=color_val,
-                    linewidth=limit_style["linewidth"],
                     label=label,
-                    zorder=2,
+                    zorder=1,
+                    **limit_style,
                 )
                 if shade_limits:
-                    color_use = "grey"
-                    zorder = 0
-                    alpha = shade_limits
                     plt.fill_between(
                         k_edges,
                         delta_edges,
                         delta_squared_range[1],
-                        color=color_use,
-                        alpha=alpha,
-                        zorder=zorder,
+                        color=shade_color,
+                        alpha=shade_alpha,
+                        zorder=0,
                     )
 
                 if ind == 0:
@@ -700,40 +712,38 @@ def plot_theories(
     theories: list[DataSet],
     theory_styles: dict[str, dict[str, Any]],
     theory_labels: list[str],
-    shade_theories: float | None,
+    shade_theories: bool,
     delta_squared_range: tuple[float, float],
 ):
     """Plot theory lines on the current plot."""
     lines = []
-
-    if shade_theories is None:
-        shade_theories = 1.0 / len(theories)
 
     for theory, label in zip(theories, theory_labels, strict=True):
         logging.getLogger("eor_limits").info(f"Plotting {theory.author} {theory.year}")
 
         theory_style = theory_styles[theory.key]
 
-        (line,) = plt.plot(
-            theory.data.k[0],
-            theory.data.delta_squared[0],
-            label=label,
-            zorder=2,
-            **theory_style,
-        )
-
+        # Shade first and pop the specific args
         if shade_theories:
-            color_use = theory_style["color"]
-            zorder = 0
-            alpha = shade_theories
+            shade_alpha = theory_style.pop("shade_alpha")
+            shade_color = theory_style.pop("shade_color")
             plt.fill_between(
                 theory.data.k[0],
                 theory.data.delta_squared[0],
                 delta_squared_range[0],
-                color=color_use,
-                alpha=alpha,
-                zorder=zorder,
+                color=shade_color,
+                alpha=shade_alpha,
+                zorder=0,
             )
+
+        # Plot the theory line on top
+        (line,) = plt.plot(
+            theory.data.k[0],
+            theory.data.delta_squared[0],
+            label=label,
+            zorder=1,
+            **theory_style,
+        )
 
         lines.append(line)
 
