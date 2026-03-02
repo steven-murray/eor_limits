@@ -3,10 +3,10 @@
 import numpy as np
 import yaml
 
-from eor_limits._paths import THEORY_PATH
-from eor_limits.datatypes import Data
+from eor_limits._datatypes import Data
+from eor_limits.theory._base import THEORY_PATH, BaseTheoryProcessor
 
-from ._base import BaseTheoryProcessor
+munoz_fdm3_path = THEORY_PATH / "Munoz2018" / "munoz_2018_fdm3.yaml"
 
 
 class Munoz2018FDM3(BaseTheoryProcessor):
@@ -16,10 +16,11 @@ class Munoz2018FDM3(BaseTheoryProcessor):
     author = "Muñoz"
     year = 2018
     doi = "10.1038/s41586-018-0151-x"
+    _datapath = munoz_fdm3_path
 
     @classmethod
     def _load_data(cls) -> Data:
-        with (THEORY_PATH / "munoz_2018_fdm3.yaml").open("r") as f:
+        with (cls._datapath).open("r") as f:
             yaml_data = yaml.safe_load(f)
 
         k = yaml_data["k"]

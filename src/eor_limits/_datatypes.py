@@ -219,10 +219,15 @@ class DataSet:
     year: int = attrs.field(converter=int)
     doi: str = attrs.field(converter=str)
     data: Data = attrs.field(validator=attrs.validators.instance_of(Data))
-
     notes: tuple[str, ...] = attrs.field(
         default=(), validator=attrs.validators.instance_of(tuple)
     )
+    _key: str = attrs.field(converter=str)
+
+    @_key.default
+    def _default_key(self) -> str:
+        """Generate a default key based on the author and year."""
+        return f"{self.author}{self.year}"
 
     def __repr__(self) -> str:
         """Return a string representation of the DataSet, including metadata."""
@@ -242,7 +247,7 @@ class DataSet:
     @classmethod
     def load(cls, path: str | Path, /) -> Self:
         """Load a DataSet from a YAML file or a known dataset name."""
-        from .data_loading import _normalize_dataset_name
+        from ._data_loading import _normalize_dataset_name
 
         path = _normalize_dataset_name(path)
 
@@ -405,7 +410,7 @@ class DataSet:
     @property
     def key(self) -> str:
         """Return a unique key for this dataset based on its metadata."""
-        return f"{self.author}{self.year}"
+        return self._key
 
     def drop_nan(self) -> Self:
         """Return a new DataSet with any rows containing NaN values removed."""

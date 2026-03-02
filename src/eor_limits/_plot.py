@@ -10,9 +10,9 @@ import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
 
-from eor_limits import KNOWN_PAPERS, load_theory_model
-
-from .datatypes import DataSet
+from ._data_loading import load_limit_data, load_theory_model
+from ._datatypes import DataSet
+from .data import KNOWN_LIMITS
 
 DEFAULT_TELESCOPE_MARKERS = {
     "PAPER": "o",
@@ -135,7 +135,7 @@ def make_plot(
     if papers is None:
         # use all the papers. This gives weird ordering which we will fix later
         papers_sorted = False
-        papers = list(KNOWN_PAPERS.keys())
+        papers = list(KNOWN_LIMITS.keys())
     else:
         # if a list is passed in by hand, don't reorder it
         papers_sorted = True
@@ -151,7 +151,7 @@ def make_plot(
     if linewidths is None:
         linewidths = {}
 
-    limits = [DataSet.load(p).drop_nan() for p in papers]
+    limits = [load_limit_data(p).drop_nan() for p in papers]
 
     if not papers_sorted:
         limits.sort(key=lambda limit: limit.year)

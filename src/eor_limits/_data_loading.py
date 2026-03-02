@@ -2,29 +2,22 @@
 
 from pathlib import Path
 
-from eor_limits.datatypes import DataSet
-
-from ._paths import DATA_PATH
-from .theory import __all_theories__
+from eor_limits._datatypes import DataSet
+from eor_limits.data import DATA_PATH, KNOWN_LIMITS
+from eor_limits.theory import KNOWN_THEORIES, __all_theories__
 
 __all___ = [
-    "KNOWN_PAPERS",
-    "KNOWN_THEORIES",
     "load_theory_model",
     "load_limit_data",
     "_normalize_dataset_name",
 ]
 
 
-KNOWN_PAPERS = {p.stem: p for p in DATA_PATH.glob("*.yaml") if p.is_file()}
-KNOWN_THEORIES = tuple(__all_theories__.keys())
-
-
 def load_theory_model(name: str) -> DataSet:
     """Get the theory data processor for a given theory name."""
-    if name not in __all_theories__:
+    if name not in KNOWN_THEORIES:
         raise ValueError(
-            f"Theory '{name}' not found. Available theories: {KNOWN_THEORIES}"
+            f"Theory '{name}' not found. Available theories: {KNOWN_THEORIES.keys()}"
         )
     return __all_theories__[name].load_as_dataset()
 
@@ -34,7 +27,7 @@ def load_limit_data(name: str | Path, /) -> DataSet:
     return DataSet.load(name)
 
 
-def _normalize_dataset_name(path: str | Path) -> Path:
+def _normalize_dataset_name(path: str | Path, /) -> Path:
     if isinstance(path, str) and not path.endswith(".yaml"):
         path = DATA_PATH / (path + ".yaml")
     elif isinstance(path, str):
@@ -46,7 +39,7 @@ def _normalize_dataset_name(path: str | Path) -> Path:
     if not path.exists():
         raise ValueError(
             f"Dataset file '{path.name}' not found. "
-            f"Available datasets: {KNOWN_PAPERS.keys()}"
+            f"Available datasets: {KNOWN_LIMITS.keys()}"
         )
 
     return path

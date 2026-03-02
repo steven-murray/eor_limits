@@ -7,13 +7,11 @@ from pathlib import Path
 
 import numpy as np
 
-from eor_limits._paths import THEORY_PATH
-from eor_limits.datatypes import Data
+from eor_limits._datatypes import Data
+from eor_limits.theory._base import THEORY_PATH, BaseTheoryProcessor
 
-from ._base import BaseTheoryProcessor
-
-faint_path = THEORY_PATH / "mesinger_2016_faint_galaxies"
-bright_path = THEORY_PATH / "mesinger_2016_bright_galaxies"
+faint_path = THEORY_PATH / "Mesinger2016" / "faint_galaxies/"
+bright_path = THEORY_PATH / "Mesinger2016" / "bright_galaxies/"
 
 
 def _parse_filename(filename: str) -> tuple[float, float]:
