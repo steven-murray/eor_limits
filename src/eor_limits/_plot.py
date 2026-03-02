@@ -2,13 +2,15 @@
 
 import logging
 from itertools import chain
-from typing import Any, Literal
+from pathlib import Path
+from typing import Annotated, Any
 
 import h5py
 import matplotlib.cm as cmx
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
+from cyclopts import Parameter
 
 from ._data_loading import load_limit_data, load_theory_model
 from ._datatypes import DataSet
@@ -22,100 +24,115 @@ DEFAULT_TELESCOPE_MARKERS = {
     "GMRT": "v",
 }
 
-logger = logging.getLogger(__name__)
+
+def plot_vs_z(*args, **kwargs):
+    """Plot 21-cm power spectrum limits as a function of redshift, z [TBD]."""
+    raise NotImplementedError("This function is not yet implemented. Stay tuned!")
 
 
-def make_plot(
-    papers: list[str] | None = None,
-    theories: list[str] | None = None,
-    theory_redshifts: list[float] | None = None,
-    theory_legend: bool = True,
-    delta_squared_range: tuple[float, float] | None = None,
-    z_range: tuple[float, float] | None = None,
-    k_range: tuple[float, float] | None = None,
-    shade_limits: str = "generational",
-    shade_theory_alpha: float | None = None,
-    colormap: str = "Spectral_r",
+def plot_vs_k(
+    # Limit plotting options
+    limits: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
     base_limit_style: dict[str, Any] | None = None,
     limit_styles: dict[str, dict[str, Any]] | None = None,
-    linewidths: dict | None = None,
-    bold_papers: list[str] | None = None,
-    fontsize: int = 15,
-    fig_ratio: float | None = None,
+    bold_limits: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
+    shade_limits: bool = True,
+    aspoints: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
+    aslines: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
+    nk_for_lines: int = 10,
+    # Limits selection options
+    z_range: tuple[float, float] | None = None,
+    k_range: tuple[float, float] | None = None,
+    delta_squared_range: tuple[float, float] | None = None,
+    # Theory plotting options
+    theories: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
+    theory_redshifts: dict[str, list[float]] | None = None,
+    base_theory_style: dict[str, Any] | None = None,
+    theory_styles: dict[str, dict[str, Any]] | None = None,
+    bold_theories: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
+    shade_theories: bool = True,
+    # Sensitivity plotting options
     sensitivities: dict | None = None,
     sensitivity_style: dict | None = None,
-    aspoints: list[str] | None = None,
-    aslines: list[str] | None = None,
-    nk_for_lines: int = 10,
-    fig: plt.Figure | None = None,
-    ax: plt.Axes | None = None,
+    # General plotting options
+    colormap: str = "Spectral_r",
+    fontsize: int = 15,
+    fig_ratio: float | None = None,
+    # Output options
+    fig: Annotated[plt.Figure | None, Parameter(show=False)] = None,
+    ax: Annotated[plt.Axes | None, Parameter(show=False)] = None,
+    out: str | Path | None = None,
 ) -> plt.Figure:
     """
-    Plot the current EoR Limits as a function of k and redshift.
+    Plot 21-cm power spectrum limits as a function of scale, k.
 
     Parameters
     ----------
-    papers : list of str
-        List of papers to include in the plot (specified as 'author_year',
-        must be present in the data folder).
+    limits : list of str
+        List of limits to include in the plot. See `KNOWN_LIMITS` for available limits.
         Defaults to `None` meaning include all papers in the data folder.
-    include_theory : bool
-        Flag to include theory lines on plots.
-    theory_params : dict
-        Dictionary specifying theory lines to include on the plot. Dictionary
-        parameters depend on the theory paper. E.g. for lines from Mesinger et al. 2016,
-        the options are 'model' which can be 'bright' or 'faint', 'nf' which specifies
-        a neutral fraction and 'redshift'. See the paper specific modules for more
-        examples. Only used if `include_theory` is True.
-    theory_legend : bool
-        Option to exclude theory lines from the legend. Used by some users who prefer
-        to add the annotations on the lines by hand to improve readability.
-    theory_redshifts : list of float
-        List specifying which redshifts to plot for theory lines. The default is to use
-        the closest redshift to the centre of the prescribed redshift range. Multiple
-        redshifts can be used.
-    plot_as_points : list of str
-        List of papers that have a line type data model to be plotted as points rather
-        that a line. This can help simplify the plot so that it's not so busy.
-    delta_squared_range : list of float
-        Range of delta squared values to include in plot (yaxis range). Must be
-        length 2 with second element greater than first element. Defaults to [1e3, 1e6]
-        if include_theory is False and [1e0, 1e6] otherwise.
-    z_range : list of float
-        Range of redshifts to include in the plot. Must be length 2 with the second
-        element greater than the first element.
-    k_range : list of float
-        Range of ks to include in the plot. Must be length 2 with the second element
-        greater than the first element.
-    shade_limits : {'generational', 'alpha', False}
-        How to shade above plotted limits. 'generational' shading shades dark grey for
-        all generation 1 papers and light grey for later generation papers. 'alpha'
-        shading shades all papers with semi-transparent grey. Setting this to False
-        results in no shading.
-    shade_theory : {'flat', 'alpha', False}
-        How to shade below theory lines. 'flat' shading shades light grey below all
-        theory lines. 'alpha' shading shades below all theory lines with
-        semi-transparent grey. Setting this to False results in no shading.
-    colormap : str
-        Matplotlib colormap to use for redshift.
-    linewidths : dict
-        Dict specifying line widths to use for specific papers, to override the line
-        widths specified in the paper yamls. Keys are paper names, values are desired
-        line widths. Default of 'None' means use the values in the paper yamls.
-    bold_papers : list of str
-        List of papers to bold in caption.
-    fontsize : float
-        Font size to use on plot.
-    plot_filename : str
-        File name to save plot to.
-    fig, ax
-        The matplotlib figure and axis on which to draw the plot. If not given, will
-        create one for you.
-    markersize : int
-        Size of the markers to use for point plots.
-    fig_ratio : float
-        Ratio of figure height to width. If None, defaults to 0.5 if theory is not
-        included, and 1 if theory is included.
+    base_limit_style : dict
+        Base style parameters for plotting limits, applied to all limits before any
+        individual overrides. For example, `{'alpha': 0.7}` to make all limits slightly
+        transparent.
+    limit_styles : dict of dict
+        Dictionary of style parameters for plotting limits. The keys are the limit
+        keys (e.g. `'Paciga2013'`), and the values are dictionaries with style
+        parameters for plotting, e.g. `{'color': 'C0', 's': 100}` for points or
+        `{'color': 'C0', 'linewidth': 3}` for lines.
+    bold_limits : list of str
+        List of limits to bold in the legend (specified as limit keys,
+        e.g. `'Paciga2013'`).
+    shade_limits : float
+        If not `None`, the alpha value to use for shading the area above each limit line
+        (or points, if plotted as points). If `None`, no shading is applied.
+    aspoints : list of str
+        List of limits to plot as points instead of lines (specified as limit keys,
+        e.g. `'Paciga2013'`).
+        If not specified, the function will automatically determine whether to plot as
+        points or lines based on the number of k values (see `nk_for_lines`).
+    aslines : list of str
+        List of limits to plot as lines instead of points (specified as limit keys,
+        e.g. `'Paciga2013'`).
+        If not specified, the function will automatically determine whether to plot as
+        points or lines based on the number of k values (see `nk_for_lines`).
+    nk_for_lines : int
+        Threshold for the number of k values to determine whether to plot a limit as
+        points or lines if not specified in `aspoints` or `aslines`. If a limit has
+        more than this number of k values, it will be plotted as a line by default;
+        otherwise, it will be plotted as points by default.
+    z_range : tuple of float
+        Tuple specifying the redshift range to include in the plot, in the form
+        `(z_min, z_max)`. If not specified, all redshifts will be included.
+    k_range : tuple of float
+        Tuple specifying the k range to include in the plot, in the form
+        `(k_min, k_max)`. If not specified, all k values will be included.
+    delta_squared_range : tuple of float
+        Tuple specifying the delta squared range to include in the plot, in the form
+        `(delta_squared_min, delta_squared_max)`. If not specified, the range will be
+         set to `[1e0, 1e6]` if theories are plotted and `[1e3, 1e6]` otherwise.
+    theories : list of str
+        List of theories to include in the plot. See `KNOWN_THEORIES` for available
+        theories and their keys. Defaults to `None` meaning no theories are plotted.
+    theory_redshifts : dict of list
+        Dictionary specifying which redshifts to plot for each theory. The keys are the
+         theory keys (e.g. `'Mesinger2016Faint'`), and the values are lists of redshifts
+         to plot for that theory.
+         If not specified, the function will plot the line closest to the center of
+         the redshift range.
+    base_theory_style : dict
+        Base style parameters for plotting theories, applied to all theories before any
+        individualoverrides. For example, `{'alpha': 0.7}` to make all theories
+        slightly transparent.
+    theory_styles : dict of dict
+        Dictionary of style parameters for plotting theories. The keys are the theory
+        keys (e.g. `'Mesinger2016Faint'`), and the values are dictionaries with
+        style parameters for plotting, e.g. `{'color': 'C1', 'linestyle': '--'}`.
+    bold_theories : list of str
+        List of theories to bold in the legend.
+    shade_theories : float
+        If not `None`, the alpha value to use for shading the area below each theory
+        line. If `None`, defaults to 1 divided by the number of theories.
     sensitivities : dict
         Dictionary of sensitivities to plot on the figure. The keys are labels for each
         sensitivity estimate, and the values are the file names of the
@@ -123,58 +140,31 @@ def make_plot(
     sensitivity_style : dict
         Dictionary of style parameters for plotting sensitivities. The keys are
         labels for each sensitivity estimate, and the values are dictionaries with
-        style parameters for plotting, e.g. {'color': 'k', 'ls': '--', 'lw': 3}.
+        style parameters for plotting,
+        e.g. `{'color': 'k', 'linestyle': '--', 'linewidth': 3}`.
         An additional key 'sensitivity_kind' can be used to specify which kind of
-        sensitivity to plot, e.g. 'sample+thermal', 'sample' or 'thermal'.
+        sensitivity to plot, e.g. `'sample+thermal'`, `'sample'` or `'thermal'`.
+    colormap : str
+        Matplotlib colormap to use for coloring limits by redshift.
+        Defaults to `'Spectral_r'`.
+    fontsize : int
+        Font size to use in the legend and axis labels. Defaults to `15`.
+    fig_ratio : float
+        Height to width ratio of the figure. If not specified, the height will be 1
+        times the width if theories are plotted, and 0.5 times the width if no theories
+        are plotted.
+    fig : matplotlib.figure.Figure
+        If specified, the figure to plot on. If not specified, a new figure
+        will be created.
+    ax : matplotlib.axes.Axes
+        If specified, the axis to plot on. If not specified, a new axis
+        will be created.
+    out : str or Path or None
+        If specified, the file name to save the figure to.
     """
-    if aspoints is None:
-        aspoints = []
-    if aslines is None:
-        aslines = []
-
-    if papers is None:
-        # use all the papers. This gives weird ordering which we will fix later
-        papers_sorted = False
-        papers = list(KNOWN_LIMITS.keys())
-    else:
-        # if a list is passed in by hand, don't reorder it
-        papers_sorted = True
-
-    if delta_squared_range is None:
-        if theories is not None:
-            delta_squared_range = (1e0, 1e6)
-        else:
-            delta_squared_range = (1e3, 1e6)
-
-    if bold_papers is None:
-        bold_papers = []
-    if linewidths is None:
-        linewidths = {}
-
-    limits = [load_limit_data(p).drop_nan() for p in papers]
-
-    if not papers_sorted:
-        limits.sort(key=lambda limit: limit.year)
-
-    limits = select_k_and_z_ranges(limits, z_range, k_range, delta_squared_range)
-    actual_z_range = get_total_z_range(limits, z_range)
-
-    if not limits:
-        raise ValueError(
-            "No limits in specified redshift, k and/or delta squared range."
-        )
-
-    # Build styles for each paper, which we will use for plotting and the legend.
-    # This also applies any overrides specified by the user.
-    points_or_lines = get_points_or_lines(limits, nk_for_lines, aspoints, aslines)
-    limit_styles = build_limit_styles(
-        limits, points_or_lines, base_limit_style, limit_styles
-    )
-
-    norm = set_cmap_norm_via_zrange(actual_z_range)
-    scalar_map = cmx.ScalarMappable(norm=norm, cmap=colormap)
-
-    fig_width = 25 if theory_legend else 20
+    ###################################################################################
+    # Set up the figure and axis
+    fig_width = 25
     if theories is not None:
         fig_height = fig_width * (fig_ratio or 1)
     else:
@@ -185,51 +175,138 @@ def make_plot(
     elif ax is not None:
         plt.sca(ax)
 
-    fig = plt.figure(figsize=(fig_width, fig_height))
-    legend_names, lines, paper_ks = plot_limit_papers(
+    ###################################################################################
+    # OBSERVATIONAL LIMITS
+
+    # Load data for limits and sort by year.
+    if limits is None:
+        limits = list(KNOWN_LIMITS.keys())
+        limits = [load_limit_data(limit).drop_nan() for limit in limits]
+        limits.sort(key=lambda limit: limit.year)
+    else:
+        limits = [load_limit_data(limit).drop_nan() for limit in limits]
+
+    # Select the specified k and z ranges from the limits
+    def _get_z_range_from_limits(limits):
+        z_min = min(min(limit.data.z) for limit in limits)
+        z_max = max(max(limit.data.z) for limit in limits)
+        return (z_min, z_max)
+
+    def _get_k_range_from_limits(limits):
+        k_min = min(min(k) for limit in limits for k in limit.data.k)
+        k_max = max(max(k) for limit in limits for k in limit.data.k)
+        min_factor = 10 ** np.ceil(np.log10(k_min) * -1)
+        max_factor = 10 ** np.ceil(np.log10(k_max) * -1)
+        return (
+            np.floor(k_min * min_factor) / min_factor,
+            np.ceil(k_max * max_factor) / max_factor,
+        )
+
+    z_range = z_range or _get_z_range_from_limits(limits)
+    k_range = k_range or _get_k_range_from_limits(limits)
+
+    if delta_squared_range is None:
+        if theories is not None:
+            delta_squared_range = (1e0, 1e6)
+        else:
+            delta_squared_range = (1e3, 1e6)
+
+    limits = select_k_and_z_ranges(limits, z_range, k_range, delta_squared_range)
+
+    z_range = _get_z_range_from_limits(limits)  # again, since we removed some limits
+    k_range = _get_k_range_from_limits(limits)  # again, since we removed some limits
+
+    # Set up colormap for redshift.
+    if z_range[0] == z_range[1]:
+        z_range_use = [z_range[0] - 1, z_range[0] + 1]
+    else:
+        z_range_use = z_range
+    norm = colors.Normalize(vmin=z_range_use[0], vmax=z_range_use[1])
+    scalar_map = cmx.ScalarMappable(norm=norm, cmap=colormap)
+
+    # Building plotting styles for each limit.
+    limit_styles = build_limit_styles(
+        limits,
+        aspoints,
+        aslines,
+        nk_for_lines,
+        shade_limits,
+        base_limit_style,
+        limit_styles,
+    )
+
+    # Whether to bold each limit in the legend
+    bold_limits = bold_limits or []
+    limit_labels = [
+        get_latex_limit_label(limit, bold=(limit.key in bold_limits))
+        for limit in limits
+    ]
+
+    # Plotting the limits as points or lines, depending on the number of k values
+    # or user specifications.
+    limit_lines = plot_limits(
         limits,
         limit_styles,
-        bold_papers,
+        limit_labels,
         shade_limits,
-        colormap,
-        norm,
+        delta_squared_range,
         scalar_map,
-        points_or_lines,
+    )
+
+    ###################################################################################
+    # THEORY MODELS
+
+    # Loading data for theories
+    theories = theories or []
+    theories = [load_theory_model(theory) for theory in theories]
+
+    # Downselecting to specified redshifts for theories,
+    # or closest redshift to centre of redshift range if no redshifts specified.
+    theory_redshifts = theory_redshifts or {}
+    new_theories = []
+    for theory in theories:
+        if theory.key not in theory_redshifts:
+            theory_redshifts[theory.key] = [0.5 * (z_range[0] + z_range[1])]
+        new_theories.extend([
+            theory.select_closest_z(z) for z in theory_redshifts[theory.key]
+        ])
+    theories = new_theories
+
+    # Build styles for theory lines, applying any overrides specified by the user.
+    theory_styles = build_theory_styles(
+        theories, shade_theories, base_theory_style, theory_styles
+    )
+
+    # Whether to bold each theory in the legend
+    bold_theories = bold_theories or []
+    theory_labels = [
+        get_latex_theory_label(theory, bold=(theory.key in bold_theories))
+        for theory in theories
+    ]
+
+    # Plotting the theory lines.
+    theory_lines = plot_theories(
+        theories,
+        theory_styles,
+        theory_labels,
+        shade_theories,
         delta_squared_range,
     )
 
-    if theories is not None:
-        theory_data = [load_theory_model(theory) for theory in theories]
+    ###################################################################################
+    # SENSITIVITIES
 
-        # Each theory has _all_ redshifts in it. We need to downselect
-        # to those specified by the user, or the closest redshift to the centre of the
-        # redshift range if no redshifts are specified.
-        if theory_redshifts is not None:
-            theory_data = [
-                data.select_closest_z(z)
-                for data in theory_data
-                for z in theory_redshifts
-            ]
-        else:
-            z_centre = 0.5 * (actual_z_range[0] + actual_z_range[1])
-            theory_data = [data.select_closest_z(z_centre) for data in theory_data]
+    # If sensitivities are specified, build styles and plot them.
+    sensitivities = sensitivities or {}
 
-        theory_styles = build_theory_styles(theory_data, linewidths)
+    # Build styles for sensitivity lines, applying any overrides specified by the user.
+    sensitivity_style = build_sensitivity_styles(sensitivities, sensitivity_style)
 
-        theory_lines, theory_labels = plot_theory_lines(
-            theory_legend,
-            delta_squared_range,
-            shade_theory_alpha,
-            theory_data,
-            theory_styles,
-        )
-    else:
-        theory_lines, theory_labels = [], []
+    # Plot the sensitivity curves.
+    plot_sensitivities(sensitivities, sensitivity_style, fontsize)
 
-    point_size = 1 / 72.0  # typography standard (points/inch)
-    font_inch = fontsize * point_size
-
-    plot_sensitivities(fontsize, sensitivities, sensitivity_style)
+    ###################################################################################
+    # PLOT ADJUSTMENTS
 
     plt.rcParams.update({"font.size": fontsize})
     plt.xlabel(r"k ($h Mpc^{-1}$)", fontsize=fontsize)
@@ -237,15 +314,6 @@ def make_plot(
     plt.yscale("log")
     plt.xscale("log")
     plt.ylim(*delta_squared_range)
-
-    if k_range is None:
-        k_range = (np.min(paper_ks), np.max(paper_ks))
-        min_factor = 10 ** np.ceil(np.log10(k_range[0]) * -1)
-        max_factor = 10 ** np.ceil(np.log10(k_range[1]) * -1)
-        k_range = (
-            np.floor(k_range[0] * min_factor) / min_factor,
-            np.ceil(k_range[1] * max_factor) / max_factor,
-        )
     plt.xlim(*k_range)
 
     plt.tick_params(labelsize=fontsize)
@@ -264,8 +332,10 @@ def make_plot(
     else:
         leg_columns = 3
 
-    leg_rows = int(np.ceil(len(legend_names) / leg_columns))
+    leg_rows = int(np.ceil(len(limit_labels) / leg_columns))
 
+    point_size = 1 / 72.0  # typography standard (points/inch)
+    font_inch = fontsize * point_size
     legend_height = (2 * leg_rows) * font_inch
 
     legend_height_norm = legend_height / fig_height  # 0.25
@@ -275,8 +345,8 @@ def make_plot(
     plot_bottom = legend_height_norm + axis_height_norm
 
     plt.legend(
-        lines + theory_lines,
-        legend_names + theory_labels,
+        limit_lines + theory_lines,
+        limit_labels + theory_labels,
         bbox_to_anchor=(0.48, legend_height_norm / 2.0),
         loc="center",
         bbox_transform=fig.transFigure,
@@ -286,6 +356,10 @@ def make_plot(
 
     plt.subplots_adjust(bottom=plot_bottom)
     fig.tight_layout()
+
+    if out is not None:
+        fig.savefig(out)
+
     return fig
 
 
@@ -299,61 +373,378 @@ def select_k_and_z_ranges(
     new_limits = []
     for limit in limits:
         if z_range is not None:
+            if len(z_range) != 2:
+                raise ValueError(
+                    "redshift range must have 2 elements with the second element "
+                    "greater than the first element."
+                )
+            if z_range[0] > z_range[1]:
+                raise ValueError(
+                    "redshift range must have 2 elements with the second element "
+                    "greater than the first element."
+                )
             try:
                 limit = limit.select_z_range(*z_range)
             except ValueError:
-                logger.info(
+                logging.getLogger("eor_limits").info(
                     f"{limit.key} skipped since its outside redshift range "
                     f"[{z_range[0]} < z < {z_range[1]}]"
                 )
                 continue
 
         if k_range is not None:
+            if len(k_range) != 2:
+                raise ValueError(
+                    "k range must have 2 elements with the second element "
+                    "greater than the first element."
+                )
+            if k_range[0] > k_range[1]:
+                raise ValueError(
+                    "k range must have 2 elements with the second element "
+                    "greater than the first element."
+                )
             try:
                 limit = limit.select_k_range(*k_range)
             except ValueError:
-                logger.info(
+                logging.getLogger("eor_limits").info(
                     f"{limit.key} skipped since its outside k range "
                     f"[{k_range[0]} < k < {k_range[1]}]"
                 )
                 continue
 
         if delta_squared_range is not None:
+            if len(delta_squared_range) != 2:
+                raise ValueError(
+                    "delta squared range must have 2 elements with the second element "
+                    "greater than the first element."
+                )
+            if delta_squared_range[0] > delta_squared_range[1]:
+                raise ValueError(
+                    "delta squared range must have 2 elements with the second element "
+                    "greater than the first element."
+                )
             try:
                 limit = limit.select_delta_squared_range(*delta_squared_range)
             except ValueError:
-                logger.info(
+                logging.getLogger("eor_limits").info(
                     f"{limit.key} skipped since its outside delta squared range "
                     f"[{delta_squared_range[0]} < delta^2 < {delta_squared_range[1]}]"
                 )
                 continue
 
         new_limits.append(limit)
+
+    if not new_limits:
+        raise ValueError(
+            "No limits in specified redshift, k and/or delta squared range."
+        )
+
     return new_limits
 
 
-def set_cmap_norm_via_zrange(z_range):
-    """Set the colormap normalization based on redshift range."""
-    if len(z_range) != 2:
-        raise ValueError(
-            "redshift range must have 2 elements with the second element greater "
-            "than the first element."
+def build_limit_styles(
+    limits: list[DataSet],
+    aspoints: list[str] | None,
+    aslines: list[str] | None,
+    nk_for_lines: int,
+    shade_limits: bool,
+    base_override: dict[str, Any] | None = None,
+    overrides: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Build a dictionary of styles to use for each limit paper."""
+    aspoints = aspoints or []
+    aslines = aslines or []
+    styles = {}
+
+    for limit in limits:
+        # Empty
+        style = {}
+        # Determine whether to plot as points or lines
+        style["as_line"] = (
+            False
+            if limit.key in aspoints
+            else True
+            if limit.key in aslines
+            else max(len(k) for k in limit.data.k) > nk_for_lines
         )
-    if z_range[0] > z_range[1]:
-        raise ValueError(
-            "redshift range must have 2 elements with the second element greater "
-            "than the first element."
+        # Set defaults for points
+        if not style["as_line"]:
+            style.setdefault("s", 150)
+            style.setdefault(
+                "marker", DEFAULT_TELESCOPE_MARKERS.get(limit.telescope, "o")
+            )
+        # Set defaults for lines
+        else:
+            style.setdefault("linewidth", 2)
+            style.setdefault("linestyle", "-")
+        # If we are shading the limits
+        if shade_limits:
+            style.setdefault("shade_alpha", 0.5)
+            style.setdefault("shade_color", "grey")
+        # Apply user overrides
+        style |= base_override if base_override else {}
+        style |= overrides.get(f"{limit.key}", {}) if overrides else {}
+        # Add to styles dictionary
+        styles[f"{limit.key}"] = style
+
+    return styles
+
+
+def build_theory_styles(
+    theories: list[DataSet],
+    shade_theories: bool,
+    base_override: dict[str, Any] | None = None,
+    overrides: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Build a dictionary of styles to use for each theory paper."""
+    styles = {}
+    for theory in theories:
+        # Empty
+        style = {}
+        # Set default style parameters for theory lines.
+        style.setdefault("linestyle", "--")
+        style.setdefault("linewidth", 2)
+        style.setdefault("color", "lightsteelblue")
+        # If we are shading the limits
+        if shade_theories:
+            style.setdefault("shade_alpha", 1 / len(theories))
+            style.setdefault("shade_color", "lightsteelblue")
+        # Set base and overrides
+        style |= base_override if base_override else {}
+        style |= overrides.get(f"{theory.key}", {}) if overrides else {}
+        # Add to styles dictionary
+        styles[f"{theory.key}"] = style
+    return styles
+
+
+def build_sensitivity_styles(
+    sensitivities: dict[str, str],
+    sensitivity_style: dict[str, dict[str, Any]] | None,
+) -> dict[str, dict[str, Any]]:
+    """Build a dictionary of styles to use for each sensitivity curve."""
+    styles = {}
+    for name in sensitivities:
+        style = {
+            "sensitivity_kind": "sample+thermal",
+            "linestyle": "--",
+            "linewidth": 3,
+            "color": "k",
+        }
+        style |= sensitivity_style.get(name, {}) if sensitivity_style else {}
+        styles[name] = style
+    return styles
+
+
+def get_latex_limit_label(paper: DataSet, bold: bool = False) -> str:
+    """Get a LaTeX label for a limit paper."""
+    label_start = " $\\bf{" if bold else " $\\rm{"
+    label_end = "}$"
+    return (
+        label_start
+        + r"\ ".join(paper.telescope.split(" "))
+        + r"\ ("
+        + paper.author
+        + r",\ "
+        + str(paper.year)
+        + ")"
+        + label_end
+    )
+
+
+def get_latex_theory_label(paper: DataSet, bold: bool = False) -> str:
+    """Get a LaTeX label for a theory paper."""
+    label_start = " $\\bf{Theory:} \\bf{" if bold else " $\\bf{Theory:} \\rm{"
+    label_end = "}$"
+    return (
+        label_start
+        + r"\ ".join(paper.telescope.split(" "))
+        + r"\ ("
+        + r"\ ".join(paper.author.split(" "))
+        + r",\ "
+        + str(paper.year)
+        + ")"
+        + label_end
+    )
+
+
+def plot_limits(
+    limits: list[DataSet],
+    limit_styles: dict[str, dict[str, Any]],
+    limit_labels: list[str],
+    shade_limits: bool,
+    delta_squared_range: tuple[float, float],
+    scalar_map: cmx.ScalarMappable,
+):
+    """Plot limit papers on the current plot."""
+    lines = []
+
+    for limit, label in zip(limits, limit_labels, strict=True):
+        logging.getLogger("eor_limits").info(f"Plotting {limit.author} {limit.year}")
+
+        limit_style = limit_styles[limit.key]
+
+        # Pop invalid args for plt.plot or plt.scatter
+        as_line = limit_style.pop("as_line")
+        if shade_limits:
+            shade_alpha = limit_style.pop("shade_alpha")
+            shade_color = limit_style.pop("shade_color")
+
+        # If we are plotting as points, we plot each redshift with specific colors
+        # and making sure to meet towards the right edges to avoid overlaps.
+        if not as_line:
+            k = np.concatenate(limit.data.k)
+            dsq = np.concatenate(limit.data.delta_squared)
+            z = list(
+                chain.from_iterable(
+                    (
+                        [z] * len(kk)
+                        for z, kk in zip(limit.data.z, limit.data.k, strict=True)
+                    ),
+                )
+            )
+
+            line = plt.scatter(
+                k,
+                dsq,
+                color=scalar_map.to_rgba(z),
+                label=label,
+                zorder=2,
+                **limit_style,
+            )
+
+            if (
+                shade_limits
+                and limit.data.k_lower is not None
+                and limit.data.k_upper is not None
+            ):
+                for klow, khi, dsq in zip(
+                    limit.data.k_lower,
+                    limit.data.k_upper,
+                    limit.data.delta_squared,
+                    strict=True,
+                ):
+                    k_edges = np.concatenate((klow, [khi[-1]]))
+                    delta_edges = np.concatenate((dsq, dsq[-1:]))
+                    plt.fill_between(
+                        k_edges,
+                        delta_edges,
+                        delta_squared_range[1],
+                        color=shade_color,
+                        alpha=shade_alpha,
+                        zorder=0,
+                    )
+
+        # If we are plotting as lines, we need to flatten the data
+        # since the k and delta_squared values are given as lists of arrays for each z.
+        else:
+            for ind, redshift in enumerate(limit.data.z):
+                k_vals = limit.data.k[ind]
+                delta_squared = limit.data.delta_squared[ind]
+                k_lower = (
+                    limit.data.k_lower[ind]
+                    if limit.data.k_lower is not None
+                    else [0] * len(k_vals)
+                )
+                k_upper = (
+                    limit.data.k_upper[ind]
+                    if limit.data.k_upper is not None
+                    else [np.inf] * len(k_vals)
+                )
+
+                # Some lines have overlapping edges (since window functions can overlap)
+                # That looks ugly, so we make sure we meet towards the right.
+                max_right_edges = np.concatenate((k_vals[1:], [np.inf]))
+                min_left_edges = np.concatenate(([0], max_right_edges[:-1]))
+
+                k_edges = np.stack((
+                    np.maximum(np.asarray(k_lower), min_left_edges),
+                    np.minimum(np.asarray(k_upper), max_right_edges),
+                )).T.flatten()
+                delta_edges = np.stack((
+                    np.asarray(delta_squared),
+                    np.asarray(delta_squared),
+                )).T.flatten()
+
+                color_val = scalar_map.to_rgba(redshift)
+
+                # make black outline by plotting thicker black line first
+                plt.plot(
+                    k_edges,
+                    delta_edges,
+                    color="black",
+                    linewidth=limit_style["linewidth"] + 2,
+                    zorder=1,
+                )
+
+                (this_line,) = plt.plot(
+                    k_edges,
+                    delta_edges,
+                    color=color_val,
+                    label=label,
+                    zorder=1,
+                    **limit_style,
+                )
+                if shade_limits:
+                    plt.fill_between(
+                        k_edges,
+                        delta_edges,
+                        delta_squared_range[1],
+                        color=shade_color,
+                        alpha=shade_alpha,
+                        zorder=0,
+                    )
+
+                if ind == 0:
+                    line = this_line
+
+        lines.append(line)
+
+    return lines
+
+
+def plot_theories(
+    theories: list[DataSet],
+    theory_styles: dict[str, dict[str, Any]],
+    theory_labels: list[str],
+    shade_theories: bool,
+    delta_squared_range: tuple[float, float],
+):
+    """Plot theory lines on the current plot."""
+    lines = []
+
+    for theory, label in zip(theories, theory_labels, strict=True):
+        logging.getLogger("eor_limits").info(f"Plotting {theory.author} {theory.year}")
+
+        theory_style = theory_styles[theory.key]
+
+        # Shade first and pop the specific args
+        if shade_theories:
+            shade_alpha = theory_style.pop("shade_alpha")
+            shade_color = theory_style.pop("shade_color")
+            plt.fill_between(
+                theory.data.k[0],
+                theory.data.delta_squared[0],
+                delta_squared_range[0],
+                color=shade_color,
+                alpha=shade_alpha,
+                zorder=0,
+            )
+
+        # Plot the theory line on top
+        (line,) = plt.plot(
+            theory.data.k[0],
+            theory.data.delta_squared[0],
+            label=label,
+            zorder=1,
+            **theory_style,
         )
 
-    if z_range[0] == z_range[1]:
-        z_range_use = [z_range[0] - 1, z_range[0] + 1]
-    else:
-        z_range_use = z_range
+        lines.append(line)
 
-    return colors.Normalize(vmin=z_range_use[0], vmax=z_range_use[1])
+    return lines
 
 
-def plot_sensitivities(fontsize, sensitivities, sensitivity_style):
+def plot_sensitivities(sensitivities, sensitivity_style, fontsize):
     """Plot the sensitivity curves."""
     sensitivity_style = sensitivity_style or {}
     sensitivities = sensitivities or {}
@@ -364,7 +755,7 @@ def plot_sensitivities(fontsize, sensitivities, sensitivity_style):
         else:
             style = sensitivity_style
 
-        sense_kind = style.get("sensitivity_kind", "sample+thermal")
+        sense_kind = style["sensitivity_kind"]
 
         if sense_kind not in ["sample+thermal", "sample", "thermal"]:
             raise ValueError(
@@ -389,9 +780,9 @@ def plot_sensitivities(fontsize, sensitivities, sensitivity_style):
         plt.plot(
             ks,
             sense,
-            color=style.get("color", "k"),
-            ls=style.get("ls", ["--", ":", "-."][indx % 3]),
-            lw=style.get("lw", [3, 2, 4][indx // 3]),
+            color=style["color"],
+            linestyle=style["linestyle"],
+            linewidth=style["linewidth"],
         )
 
         # Put the instrument name right on the plot.
@@ -401,334 +792,3 @@ def plot_sensitivities(fontsize, sensitivities, sensitivity_style):
         plt.text(
             ks[k_ind], sense[k_ind], name, fontsize=fontsize, verticalalignment="top"
         )
-
-
-def plot_theory_lines(
-    theory_legend: bool,
-    delta_squared_range: tuple[float, float],
-    shade_theory_alpha: float,
-    theory_paper_list: list[DataSet],
-    theory_styles: dict[str, dict[str, Any]],
-):
-    """Plot theory lines on the current plot."""
-    labels = []
-    lines = []
-    if shade_theory_alpha is None:
-        shade_theory_alpha = 1.0 / len(theory_paper_list)
-    for paper in theory_paper_list:
-        label = get_latex_theory_label(paper)
-
-        (line,) = plt.plot(
-            paper.data.k[0],
-            paper.data.delta_squared[0],
-            zorder=2,
-            **theory_styles.get(paper.key, {}),
-        )
-
-        if shade_theory_alpha:
-            color_use = theory_styles.get(paper.key, {})["c"]
-            zorder = 0
-            alpha = shade_theory_alpha
-            plt.fill_between(
-                paper.data.k[0],
-                paper.data.delta_squared[0],
-                delta_squared_range[0],
-                color=color_use,
-                alpha=alpha,
-                zorder=zorder,
-            )
-
-        lines.append(line)
-        if theory_styles.get(paper.key, {}).get("linewidth", 0) > 0 and theory_legend:
-            labels.append(label)
-        else:
-            labels.append(None)
-
-    return lines, labels
-
-
-def build_limit_styles(
-    limits: list[DataSet],
-    lines_or_points: dict[str, Literal["points", "lines"]],
-    base_override: dict[str, Any] | None = None,
-    overrides: dict[str, dict[str, Any]] | None = None,
-) -> dict[str, dict[str, Any]]:
-    """Build a dictionary of styles to use for each limit paper."""
-    styles = {}
-    for limit in limits:
-        if lines_or_points[limit.key] == "points":
-            style = {"s": 150}
-            style |= base_override if base_override else {}
-
-            style["marker"] = DEFAULT_TELESCOPE_MARKERS.get(limit.telescope, "o")
-
-            style |= overrides.get(f"{limit.key}", {}) if overrides else {}
-
-        else:
-            style = {
-                "linewidth": 2,
-                "linestyle": "-",
-            }
-            style |= base_override if base_override else {}
-            style |= overrides.get(f"{limit.key}", {}) if overrides else {}
-
-        styles[f"{limit.key}"] = style
-    return styles
-
-
-def build_theory_styles(
-    theory_papers: list[DataSet],
-    linewidths: dict | None = None,
-) -> dict[str, dict[str, Any]]:
-    """Build a dictionary of styles to use for each theory paper."""
-    styles = {}
-    for paper in theory_papers:
-        style = {
-            "linewidth": 2,
-            "linestyle": "--",
-            "c": "lightsteelblue",
-        }
-        if linewidths and paper.key in linewidths:
-            style["linewidth"] = linewidths[paper.key]
-        styles[paper.key] = style
-    return styles
-
-
-def get_latex_paper_label(paper: DataSet, bold: bool = False) -> str:
-    """Get a LaTeX label for a paper."""
-    label_start = " $\\bf{" if bold else " $\\rm{"
-    label_end = "}$"
-    return (
-        label_start
-        + r"\ ".join(paper.telescope.split(" "))
-        + r"\ ("
-        + paper.author
-        + r",\ "
-        + str(paper.year)
-        + ")"
-        + label_end
-    )
-
-
-def get_latex_theory_label(paper: DataSet) -> str:
-    """Get a LaTeX label for a theory paper."""
-    return (
-        " $\\bf{Theory:} \\rm{ "
-        + r"\ ".join(paper.telescope.split(" "))
-        + r"\ ("
-        + r"\ ".join(paper.author.split(" "))
-        + r",\ "
-        + str(paper.year)
-        + ")}$"
-    )
-
-
-def get_points_or_lines(
-    limits,
-    nk_for_lines: int,
-    aspoints: list[str] | None,
-    aslines: list[str] | None,
-) -> dict[str, Literal["points", "lines"]]:
-    """Determine whether to plot each limit paper as points or lines."""
-    out = {}
-    for limit in limits:
-        if limit.key in aspoints:
-            out[limit.key] = "points"
-        elif limit.key in aslines:
-            out[limit.key] = "lines"
-        else:
-            maxlen = max(len(k) for k in limit.data.k)
-            if maxlen <= nk_for_lines:
-                out[limit.key] = "points"
-            else:
-                out[limit.key] = "lines"
-
-    return out
-
-
-def plot_limit_papers(
-    limits: list[DataSet],
-    limit_styles: dict[str, dict[str, Any]],
-    bold_papers: list[str],
-    shade_limits,
-    colormap,
-    norm,
-    scalar_map,
-    points_or_lines: dict[str, Literal["points", "lines"]],
-    delta_squared_range,
-):
-    """Plot limit papers on the current plot."""
-    legend_names = []
-    lines = []
-    paper_ks = []
-    for paper in limits:
-        logger.info(f"Plotting {paper.author} {paper.year}")
-        label = get_latex_paper_label(paper, bold=paper.key in bold_papers)
-        if points_or_lines[paper.key] == "points":
-            these_ks, line = plot_limit_paper_as_points(
-                shade_limits,
-                colormap,
-                norm,
-                paper,
-                label,
-                limit_style=limit_styles.get(paper.key, {}),
-                delta_squared_range=delta_squared_range,
-            )
-        else:
-            these_ks, line = plot_limit_paper_lines(
-                paper,
-                shade_limits=shade_limits,
-                scalar_map=scalar_map,
-                label=label,
-                style=limit_styles[paper.key],
-                delta_squared_range=delta_squared_range,
-            )
-
-        paper_ks.extend(these_ks)
-        lines.append(line)
-        legend_names.append(label)
-
-    return legend_names, lines, paper_ks
-
-
-def plot_limit_paper_lines(
-    limit: DataSet,
-    shade_limits: float,
-    scalar_map,
-    label: str,
-    style: dict[str, Any],
-    delta_squared_range: tuple[float, float],
-):
-    """Plot a limit paper with line data on the current plot."""
-    for ind, redshift in enumerate(limit.data.z):
-        k_vals = limit.data.k[ind]
-        delta_squared = limit.data.delta_squared[ind]
-        k_lower = (
-            limit.data.k_lower[ind]
-            if limit.data.k_lower is not None
-            else [0] * len(k_vals)
-        )
-        k_upper = (
-            limit.data.k_upper[ind]
-            if limit.data.k_upper is not None
-            else [np.inf] * len(k_vals)
-        )
-
-        # Some lines have overlapping edges (since window functions can overlap)
-        # That looks ugly, so we make sure we meet towards the right.
-        max_right_edges = np.concatenate((k_vals[1:], [np.inf]))
-        min_left_edges = np.concatenate(([0], max_right_edges[:-1]))
-
-        k_edges = np.stack((
-            np.maximum(np.asarray(k_lower), min_left_edges),
-            np.minimum(np.asarray(k_upper), max_right_edges),
-        )).T.flatten()
-        delta_edges = np.stack((
-            np.asarray(delta_squared),
-            np.asarray(delta_squared),
-        )).T.flatten()
-
-        color_val = scalar_map.to_rgba(redshift)
-        # make black outline by plotting thicker black line first
-        plt.plot(
-            k_edges,
-            delta_edges,
-            c="black",
-            linewidth=style["linewidth"] + 2,
-            zorder=2,
-        )
-
-        (this_line,) = plt.plot(
-            k_edges,
-            delta_edges,
-            c=color_val,
-            linewidth=style["linewidth"],
-            label=label,
-            zorder=2,
-        )
-        if shade_limits:
-            color_use = "grey"
-            zorder = 0
-            alpha = shade_limits
-            plt.fill_between(
-                k_edges,
-                delta_edges,
-                delta_squared_range[1],
-                color=color_use,
-                alpha=alpha,
-                zorder=zorder,
-            )
-
-        if ind == 0:
-            line = this_line
-            out_ks = k_vals
-
-    return out_ks, line
-
-
-def plot_limit_paper_as_points(
-    shade_limits: bool,
-    colormap: str,
-    norm,
-    paper: DataSet,
-    label: str,
-    limit_style: dict[str, Any],
-    delta_squared_range: tuple[float, float],
-):
-    """Plot a limit paper with point data on the current plot."""
-    # flatten all the data (remember that at each z, the size of k might be different)
-    k = np.concatenate(paper.data.k)
-    dsq = np.concatenate(paper.data.delta_squared)
-    z = list(
-        chain.from_iterable(
-            ([z] * len(kk) for z, kk in zip(paper.data.z, paper.data.k, strict=True)),
-        )
-    )
-
-    line = plt.scatter(
-        k,
-        dsq,
-        c=z,
-        cmap=colormap,
-        norm=norm,
-        label=label,
-        zorder=10,
-        **limit_style,
-    )
-
-    if (
-        shade_limits
-        and paper.data.k_lower is not None
-        and paper.data.k_upper is not None
-    ):
-        color_use = "grey"
-        zorder = 0
-        alpha = 0.5
-
-        for klow, khi, dsq in zip(
-            paper.data.k_lower,
-            paper.data.k_upper,
-            paper.data.delta_squared,
-            strict=True,
-        ):
-            k_edges = np.concatenate((klow, [khi[-1]]))
-            delta_edges = np.concatenate((dsq, dsq[-1:]))
-            plt.fill_between(
-                k_edges,
-                delta_edges,
-                delta_squared_range[1],
-                color=color_use,
-                alpha=alpha,
-                zorder=zorder,
-            )
-
-    return k, line
-
-
-def get_total_z_range(paper_list, z_range):
-    """Get the total redshift range across all papers."""
-    if z_range is not None:
-        return z_range
-    minz = min(min(paper.data.z) for paper in paper_list)
-    maxz = max(max(paper.data.z) for paper in paper_list)
-    return (minz, maxz)
