@@ -3,9 +3,10 @@ name = "eor-limits"
 description = "A data format and plotting utility for 21cm power spectrum upper limits."
 readme = "README.md"
 authors = [
+    { name = "Jiten Dhandha", email = "jitendhandha@gmail.com" },
+    { name = "Steven Murray", email = "murray.steveng@gmail.com" },
     { name = "Nichole Barry", email = "nichole.barry@unsw.edu.au"},
     { name = "Bryna Hazelton", email = "brynah@phys.washington.edu"},
-    { name = "Steven Murray", email = "murray.steveng@gmail.com" },
 ]
 requires-python = ">=3.12"
 dependencies = [
@@ -49,7 +50,7 @@ dev = [
     "ruff>=0.14.14",
 ]
 docs = [
-    "furo>=2025.12.19",
+    "sphinx-book-theme>=1.1.4",
     "ipython>=9.9.0",
     "myst-parser>=5.0.0",
     "nbsphinx>=0.9.8",

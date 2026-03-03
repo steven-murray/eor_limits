@@ -28,7 +28,42 @@ def _tuple_of_floatarrays(x):
 
 @attrs.define(frozen=True, kw_only=True)
 class Data:
-    """A class representing the data for a single dataset."""
+    r"""
+    Class representing the data for a single dataset.
+
+    The data consists of arrays of redshift values |z|, |k| values
+    for those redshifts, and the corresponding power spectrum upper limits
+    |dsq|, along with optional lower and upper bounds
+    on the |z| and |k| values.
+
+    Attributes
+    ----------
+    z : np.ndarray
+        A 1D array of redshift values |z| for the dataset.
+    z_lower : np.ndarray | None
+        A 1D array of lower bounds on the |z|-bins,
+        or ``None`` if not available.
+    z_upper : np.ndarray | None
+        A 1D array of upper bounds on the |z|-bins,
+        or ``None`` if not available.
+    z_tags : tuple[str, ...] | None
+        A 1D array of tags for the |z| values (e.g. ``'Pol E-W'``, ``'Field 1'``),
+        or ``None`` if not available. Thus, different polarizations or fields
+        are treated as separate redshift entries with the same k value
+        but different tags.
+    k : tuple[np.ndarray, ...]
+        A tuple of 1D arrays of scale values |k|, one for each redshift value,
+        in units of |h/Mpc|.
+    k_lower : tuple[np.ndarray, ...] | None
+        A tuple of 1D arrays of lower bounds on the |k|-bins, one for each
+        redshift value, in units of |h/Mpc|, or ``None`` if not available.
+    k_upper : tuple[np.ndarray, ...] | None
+        A tuple of 1D arrays of upper bounds on the |k|-bins, one for each
+        redshift value, in units of |h/Mpc|, or ``None`` if not available.
+    delta_squared : tuple[np.ndarray, ...]
+        A tuple of 1D arrays of |dsq| values, one for each
+        redshift value, in units of |mK^2|.
+    """
 
     z: np.ndarray = attrs.field(converter=_floatarray)
     z_lower: np.ndarray | None = attrs.field(
@@ -145,7 +180,6 @@ class Data:
 
     @property
     def delta_squared(self) -> tuple[np.ndarray, ...]:
-        """The value of the power spectrum upper limit, in mK^2."""
         if self._delta_squared is not None:
             return tuple(np.asarray(arr) for arr in self._delta_squared)
         if self._delta is not None:
@@ -153,7 +187,12 @@ class Data:
         raise ValueError("Either delta_squared or delta must be provided.")
 
     def as_pandas_df(self) -> pd.DataFrame:
-        """Convert the Data object to a pandas DataFrame."""
+        """
+        Convert the Data object to a pandas DataFrame.
+
+        This is useful for viewing the data in a tabular format
+        or using the slicing/conversion capabilities of pandas.
+        """
         # Create DataFrame row by row for each z value
         rows = []
         for i in range(len(self.z)):
@@ -175,7 +214,15 @@ class Data:
         return pd.DataFrame(rows)
 
     def drop_nan(self) -> Self:
-        """Return a new Data object with any rows containing NaN values removed."""
+        """
+        Return a new Data object with any rows containing NaN values removed.
+
+        Returns
+        -------
+        Data
+            A new Data object containing only the data points with no NaN values in
+            |z|, |k| or |dsq|.
+        """
 
         def mask(dsq):
             return np.isfinite(dsq)
@@ -205,13 +252,34 @@ class Data:
 
 @attrs.define(frozen=True)
 class DataSet:
-    """A class representing a dataset, including metadata and the data itself.
+    r"""
+    Class representing a dataset, including metadata and the data itself.
 
-    The data is stored in a Data object, which contains arrays of z, k and
-    delta_squared values.
+    The metadata includes the telescope,author, year and DOI of the dataset,
+    as well as any additional notes. The data is stored in a :class:`~eor_limits.Data`
+    object, which contains arrays of redshifts |z|, scales |k| (in units of
+    |h/Mpc|) and |dsq| (in units of |mK^2|).
 
-    The metadata includes the telescope, author, year and doi of the dataset, as well
-    as any additional notes.
+    Attributes
+    ----------
+    telescope : str
+        The name of the telescope or experiment that produced the dataset.
+    author : str
+        The name of the first author of the dataset,
+        or the collaboration name if applicable.
+    year : int
+        The year the dataset was published.
+    doi : str
+        The DOI of the dataset. Only published datasets with DOIs should be
+        included in the repository.
+    data : Data
+        The data for the dataset, stored in a Data object.
+    notes : tuple[str, ...]
+        Any additional notes about the dataset, such as details of the analysis
+        or assumptions made about k-bins.
+    key : str
+        A unique key for the dataset, automatically generated from the author and
+        year (e.g. ``'Paciga2013'``). This is used for referencing the dataset.
     """
 
     telescope: str = attrs.field(converter=str)
@@ -246,7 +314,43 @@ class DataSet:
 
     @classmethod
     def load(cls, path: str | Path, /) -> Self:
-        """Load a DataSet from a YAML file or a known dataset name."""
+        """
+        Load a DataSet from a YAML file or a known dataset name.
+
+        If a known dataset name is provided (e.g. ``'Paciga2013'``), the corresponding
+        YAML file will be loaded from the repository. If a path to a YAML file is
+        provided, the dataset will be loaded from that file.
+
+        The YAML file must be formatted correctly with the required fields for metadata
+        and data, as shown below.
+
+        .. code-block:: yaml
+
+            telescope: GMRT
+            author: Paciga
+            year: 2013
+            doi: 10.1093/mnras/stt753
+            data:
+              delta_squared: [[6.15e4]]
+              k: [[0.5]]
+              z: [8.6]
+
+        The limits can be provided as either ``delta`` (|delta|) or
+        ``delta_squared`` (|dsq|), but not both.
+        If |delta| is provided, it will be squared to obtain |dsq|.
+        The |k| values must be provided in units of |h/Mpc|.
+
+        Parameters
+        ----------
+        path : str | Path
+            The path to the YAML file containing the dataset, or a known dataset
+            name (e.g. ``'Paciga2013'``) that is registered in ``KNOWN_LIMITS``.
+
+        Returns
+        -------
+        DataSet
+            The loaded dataset as a DataSet object.
+        """
         from ._data_loading import _normalize_dataset_name
 
         path = _normalize_dataset_name(path)
@@ -341,7 +445,22 @@ class DataSet:
         return attrs.evolve(self, data=new_data)
 
     def select_z_range(self, z_min: float, z_max: float) -> Self:
-        """Return a new DataSet with only data in the specified redshift range."""
+        """
+        Return a new DataSet with only the data in the specified |z| range.
+
+        Parameters
+        ----------
+        z_min : float
+            The minimum |z| value to include (inclusive).
+        z_max : float
+            The maximum |z| value to include (inclusive).
+
+        Returns
+        -------
+        DataSet
+            A new DataSet containing only the data points with |z| values
+            between ``z_min`` and ``z_max``.
+        """
         mask = (self.data.z >= z_min) & (self.data.z <= z_max)
         if not mask.any():
             raise ValueError(
@@ -350,7 +469,22 @@ class DataSet:
         return self._select_with_z_based_mask(mask)
 
     def select_k_range(self, k_min: float, k_max: float) -> Self:
-        """Return a new DataSet with only data in the specified k range."""
+        """
+        Return a new DataSet with only the data in the specified |k| range.
+
+        Parameters
+        ----------
+        k_min : float
+            The minimum |k| value to include (inclusive).
+        k_max : float
+            The maximum |k| value to include (inclusive).
+
+        Returns
+        -------
+        DataSet
+            A new DataSet containing only the data points with |k| values
+            between ``k_min`` and ``k_max``.
+        """
 
         def mask(kk):
             return (kk >= k_min) & (kk <= k_max)
@@ -365,7 +499,22 @@ class DataSet:
     def select_delta_squared_range(
         self, delta_squared_min: float, delta_squared_max: float
     ) -> Self:
-        """Return a new DataSet with only data in the specified delta_squared range."""
+        """
+        Return a new DataSet with only the data in the specified |dsq| range.
+
+        Parameters
+        ----------
+        delta_squared_min : float
+            The minimum |dsq| value to include (inclusive).
+        delta_squared_max : float
+            The maximum |dsq| value to include (inclusive).
+
+        Returns
+        -------
+        DataSet
+            A new DataSet containing only the data with |dsq| values
+            between ``delta_squared_min`` and ``delta_squared_max``.
+        """
 
         def mask(dsq):
             return (dsq >= delta_squared_min) & (dsq <= delta_squared_max)
@@ -379,14 +528,41 @@ class DataSet:
             ) from err
 
     def select_closest_z(self, z_target: float) -> Self:
-        """Return a new DataSet with only the data point closest to the target z."""
+        """
+        Return a new DataSet with only the data closest to the target |z|.
+
+        Parameters
+        ----------
+        z_target : float
+            The target redshift value to find the closest data to.
+
+        Returns
+        -------
+        DataSet
+            A new DataSet containing only the data with |z| value closest
+            to ``z_target``.
+
+        """
         idx = np.abs(self.data.z - z_target).argmin()
         mask = np.zeros_like(self.data.z, dtype=bool)
         mask[idx] = True
         return self._select_with_z_based_mask(mask)
 
     def select_closest_k(self, k_target: float) -> Self:
-        """Return a new DataSet with only the data point closest to the target k."""
+        """
+        Return a new DataSet with only the data closest to the target |k|.
+
+        Parameters
+        ----------
+        k_target : float
+            The target |k| value to find the closest data to.
+
+        Returns
+        -------
+        DataSet
+            A new DataSet containing only the data with |k| value closest
+            to ``k_target`` for each redshift.
+        """
 
         def mask(kk):
             idx = np.abs(kk - k_target).argmin()
@@ -397,7 +573,15 @@ class DataSet:
         return self._select_with_k_based_mask(mask, "k")
 
     def select_lowest_delta_squared(self) -> Self:
-        """Return a new DataSet with only the lowest delta_squared data points."""
+        """
+        Return a new DataSet with only the lowest |dsq| data points.
+
+        Returns
+        -------
+        DataSet
+            A new DataSet containing only the data point with the lowest |dsq|
+            value for each redshift.
+        """
 
         def mask(dsq):
             idx = np.nanargmin(dsq)
@@ -409,10 +593,17 @@ class DataSet:
 
     @property
     def key(self) -> str:
-        """Return a unique key for this dataset based on its metadata."""
         return self._key
 
     def drop_nan(self) -> Self:
-        """Return a new DataSet with any rows containing NaN values removed."""
+        """
+        Return a new DataSet with any rows containing NaN values removed.
+
+        Returns
+        -------
+        DataSet
+            A new DataSet containing only the data points with no NaN values in
+            |z|, |k| or |dsq|.
+        """
         new_data = self.data.drop_nan()
         return attrs.evolve(self, data=new_data)

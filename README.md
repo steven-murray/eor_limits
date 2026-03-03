@@ -1,90 +1,127 @@
 # eor-limits
 
-`eor-limits` is a small utility defining a format for 21cm upper limits and plotting them.
+`eor-limits` is a small utility that provides a compendium of published upper limits on the 21-cm power spectrum from the Epoch of Reionization (EoR) and Cosmic Dawn. It also provides functionality to plot these limits as a function of scale $k$ and redshift $z$, along with some theoretical predictions from simulations.
 
-The primary functionality is to plot published limits and simulations as a
-function of k and redshift. The data for the plots is included in human-readable
-yaml files in the data folder, so adding new data or theory lines is as simple
-as putting the data in a yaml file and placing it in the data directory.
+The published limits are included in human-readable yaml files in the data folder, and the plotting functionality is highly customizable through keywords. It is possible to read in custom yaml files to add new limits or simulations, and we welcome pull requests to add new data sets or simulations from published papers.
 
-We aim to continually update the repository to include all published limits in the field.
-The goal is to make it easier for experimentalists and theorists to add their own data
-or simulations and quickly compare on a 'standard' plot.
+To use the code, check out the _Usage and examples_. For users who want to quickly explore the limits and make plots without needing to install anything, check out the new online interface: [eorlimits.streamlit.app](https://eorlimits.streamlit.app/)!
 
-This code snippet is fully open source (BSD). Feel free to use the resulting plots in
-papers or presentations as you see fit.
+![Example EoR Limit plot](docs/source/_static/eor_limits.png)
 
-We show a sample plot below, the appearence is highly customizable through keywords.
+## Installation and dependencies
 
-![example EoR Limit plot](eor_limits.png)
+### User installation
 
-# Community Guidelines
-We welcome pull requests to add new data sets or simulations. We require that
-data and simulations come from peer-reviewed published papers. If you would
-like to add unpublished data or simulations to a plot, please fork this
-repository and add the data or simulations in your fork. If the data or
-simulations are subsequently published we welcome a pull request from your
-fork to add them to this repository.
-
-We also welcome bug reports or feature requests, please file them as issues
-on the github repository.
-
-# Installation
-Clone the repository using
+* Clone the repository using
 ```git clone https://github.com/EoRImaging/eor_limits```
 
-For a simple user installation, change directories into the `eor_limits` folder and
+* For a simple user installation, change directories into the `eor_limits` folder and
 run ```pip install .``` (including the dot).
 
-To install without dependencies, run `pip install --no-deps .` (including the dot).
+* To install without dependencies, run `pip install --no-deps .` (including the dot).
 
-Developers who would like to contribute to the code should follow
-the directions under [Developer Installation](#developer-installation) below.
+### Developer installation
 
-## Dependencies
+* Developers who would like to contribute to the code can install the package as: ```pip install -e .[dev]``` (including the dot). This will install the package in editable mode, which allows you to make changes to the code and have them immediately reflected when you import the package. It will also install the development dependencies, which include tools for testing and formatting the code.
 
-If you prefer to manage dependencies manuallly, you will
-need to install the following dependencies.
+* If you prefer to use `uv` to manage your environment, you can install the package in editable mode with the development dependencies using: ```uv sync --all-extras --editable .```
 
-* numpy
-* matplotlib
-* pyyaml
+* To use pre-commit to prevent committing code that does not follow our style,
+you'll need to run `pre-commit install` in the top level `eor_limits` directory.
 
-## Developer Installation
+## Usage and examples
 
-Clone the repo and install the package and its development dependencies, e.g. with `pip`:
+There are three main ways to use the code: through the online interface, as a library within a notebook or python script, or through the command line interface (CLI).
 
-```pip install -e .[dev]```
+### Using the online interface
 
-or with `uv`:
+We recommend using the online interface for users who just want to explore the limits and make plots without needing to install anything. The interface is built using [Streamlit](https://streamlit.io/) and provides an easy-to-use interface for selecting which limits to include in the plot, filtering them in various ways, and downloading the data and the plot. You can access the online interface at [eorlimits.streamlit.app](https://eorlimits.streamlit.app/).
 
-```uv sync --all-extras```
+### Using the library
 
-To use pre-commit to prevent committing code that does not follow our style, you'll
-need to run `pre-commit install` in the top level `eor_limits` directory.
+The library also allows you to load, slice and dice the data in various ways, and also includes plotting functionality. For a detailed tutorial on how to use the library, see the _Tutorial notebook_. Here we just give a brief overview of how to make plots. To make the default plot of all the limits as a function of scale $k$, run:
 
-# Making plots
-
-You can either use the CLI or library -- or even the [online interface](https://eorlimits.streamlit.app/)!
-
-## CLI
-
-After installation, use `eor-limits plot` from the CLI to make the default
-plot (including all the papers in the data folder). There are a number of
-options to customize the plot, use ```eor-limits plot --help```
-to see the various options.
-
-For example, ```eor-limits plot --bold barry_2019 kolopanis_2019 li_2019``` would
-bold the references to the papers published in 2019.
-
-
-## Notebook
-
-Alternatively, to make the plot within an interactive environment like a
-Jupyter notebook, run:
-
-```
+```python
 from eor_limits import plot_vs_k
 plot_vs_k()
 ```
-and the plot should appear inline.
+
+A more customized plot can be also be made. For example, we can plot the HERA limits, shading the 2023 ones and bolding the legend item, and Mesinger2016Faint and Mesinger2016Bright simulations with different colors and shaded regions:
+
+```python
+from eor_limits import plot_vs_k
+plot_vs_k(
+    limits=["HERA2022", "HERA2023", "HERA2026"],
+    bold_limits=["HERA2026"],
+    shade_limits=True,
+    base_limit_style={"linewidth": 5, "shade_alpha": 0.1},
+    limit_styles={
+        "HERA2023": {"shade_alpha": 0.25, "shade_color": "C1"}
+    },
+    theories=["Mesinger2016Faint", "Mesinger2016Bright"],
+    shade_theories=True,
+    base_theory_style={"linestyle": "-."},
+    theory_styles={
+        "Mesinger2016Faint": {"color": "C3", "shade_alpha": 0.5, "shade_color": "C3"},
+        "Mesinger2016Bright": {"color": "C4", "shade_alpha": 0.1, "shade_color": "C4"}
+    },
+    out="MyPlot.pdf"
+)
+```
+
+### Using the CLI
+
+After installation, you can also use the `eor-limits` command from the terminal to make plots. In the terminal, you can run ```eor-limits -h``` or ```eor-limits plot-vs-k -h``` to see the various options for customizing the plot. The CLI provides the same functionality as the library, but allows you to make plots without needing to write any code. For the default plot of all the limits as a function of scale $k$, you can simply run:
+
+```bash
+eor-limits plot-vs-k --out=MyPlot.pdf
+```
+
+To make the same customized plot as in the library example, you can run:
+
+```bash
+eor-limits plot-vs-k \
+    --limits=HERA2022 HERA2023 HERA2026 \
+    --bold-limits=HERA2026 \
+    --shade-limits \
+    --base-limit-style.linewidth=5 \
+    --base-limit-style.shade_alpha=0.1 \
+    --limit-styles.HERA2023.shade_alpha=0.25 \
+    --limit-styles.HERA2023.shade_color='C1' \
+    --theories=Mesinger2016Faint Mesinger2016Bright \
+    --shade-theories \
+    --base-theory-style.linestyle='-.' \
+    --theory-styles.Mesinger2016Faint.color='C3' \
+    --theory-styles.Mesinger2016Faint.shade_alpha=0.5 \
+    --theory-styles.Mesinger2016Faint.shade_color='C3' \
+    --theory-styles.Mesinger2016Bright.color='C4' \
+    --theory-styles.Mesinger2016Bright.shade_alpha=0.1 \
+    --theory-styles.Mesinger2016Bright.shade_color='C4' \
+    --out MyPlot.pdf
+```
+
+## Community guidelines
+
+### Contributing to the repository
+
+We welcome contributions to this repository from the community. If you would like to contribute, please follow these guidelines:
+
+* If you would like to add new data sets or simulations, ensure that they come from peer-reviewed published papers and make a pull request to add them to the repository (see _Developer Installation_ for information on how to set up your environment). The data should be added in the form of a YAML file in the data folder, following the format of the existing files:
+    ```yaml
+    telescope: GMRT
+    author: Paciga
+    year: 2013
+    doi: 10.1093/mnras/stt753
+    data:
+        delta_squared: [[6.15e4]]
+        k: [[0.5]]
+        z: [8.6]
+    ```
+
+* If you would like to add unpublished data or simulations to a plot, please fork this repository and add the data or simulations in your fork. If the data or simulations are subsequently published we welcome a pull request from your fork to add them to this repository.
+
+* If you would like to report a bug or request a feature, please file an issue on the github repository.
+
+### License
+
+This code is fully open-source, available under BSD 2-Clause License. See the LICENSE file for more details.  Please feel free to use and modify the code as needed.
