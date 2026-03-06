@@ -1,6 +1,8 @@
 """Module defining a plotting function for EoR limits vs k and redshift."""
 
+import json
 import logging
+from collections.abc import Sequence
 from itertools import chain
 from pathlib import Path
 from typing import Annotated, Any
@@ -10,7 +12,7 @@ import matplotlib.cm as cmx
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
-from cyclopts import Parameter
+from cyclopts import Parameter, Token
 
 from ._data_loading import load_limit_data, load_theory_model
 from ._datatypes import DataSet
@@ -25,9 +27,25 @@ DEFAULT_TELESCOPE_MARKERS = {
 }
 
 
+def _json_str_to_dict(type_, tokens: Sequence[Token]) -> dict:
+    """Convert a JSON string to a dictionary."""
+    try:
+        json_str = tokens[0].value
+        return json.loads(json_str) if json_str else {}
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON string: {json_str}") from e
+
+
+StrList = Annotated[list[str] | None, Parameter(consume_multiple=True)]
+JsonDict = Annotated[dict[str, Any] | None, Parameter(converter=_json_str_to_dict)]
+JsonNestedDict = Annotated[
+    dict[str, dict[str, Any]] | None, Parameter(converter=_json_str_to_dict)
+]
+
+
 def plot_vs_z(*args, **kwargs):
     """
-    Plot 21-cm power spectrum limits as a function of redshift, z.
+    Plot 21-cm power spectrum limits as a function of redshift |z|.
 
     Not yet implemented. Stay tuned!
     """
@@ -36,24 +54,24 @@ def plot_vs_z(*args, **kwargs):
 
 def plot_vs_k(
     # Limit plotting options
-    limits: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
-    base_limit_style: dict[str, Any] | None = None,
-    limit_styles: dict[str, dict[str, Any]] | None = None,
-    bold_limits: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
+    limits: StrList = None,
+    base_limit_style: JsonDict = None,
+    limit_styles: JsonNestedDict = None,
+    bold_limits: StrList = None,
     shade_limits: bool = True,
-    aspoints: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
-    aslines: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
+    aspoints: StrList = None,
+    aslines: StrList = None,
     nk_for_lines: int = 10,
     # Limits selection options
     z_range: tuple[float, float] | None = None,
     k_range: tuple[float, float] | None = None,
     delta_squared_range: tuple[float, float] | None = None,
     # Theory plotting options
-    theories: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
+    theories: StrList = None,
     theory_redshifts: dict[str, list[float]] | None = None,
-    base_theory_style: dict[str, Any] | None = None,
-    theory_styles: dict[str, dict[str, Any]] | None = None,
-    bold_theories: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None,
+    base_theory_style: JsonDict = None,
+    theory_styles: JsonNestedDict = None,
+    bold_theories: StrList = None,
     shade_theories: bool = True,
     # Sensitivity plotting options
     sensitivities: dict | None = None,
@@ -181,9 +199,9 @@ def plot_vs_k(
         fig_height = fig_width * (fig_ratio or 0.5)
 
     if fig is None or ax is None:
-        fig = plt.figure(figsize=(fig_width, fig_height))
+        fig, ax = plt.subplots(figsize=(fig_width, fig_height))
     elif ax is not None:
-        plt.sca(ax)
+        fig = ax.get_figure()
 
     ###################################################################################
     # OBSERVATIONAL LIMITS
@@ -255,6 +273,7 @@ def plot_vs_k(
     # Plotting the limits as points or lines, depending on the number of k values
     # or user specifications.
     limit_lines = plot_limits(
+        ax,
         limits,
         limit_styles,
         limit_labels,
@@ -296,6 +315,7 @@ def plot_vs_k(
 
     # Plotting the theory lines.
     theory_lines = plot_theories(
+        ax,
         theories,
         theory_styles,
         theory_labels,
@@ -313,27 +333,25 @@ def plot_vs_k(
     sensitivity_style = build_sensitivity_styles(sensitivities, sensitivity_style)
 
     # Plot the sensitivity curves.
-    plot_sensitivities(sensitivities, sensitivity_style, fontsize)
+    plot_sensitivities(ax, sensitivities, sensitivity_style, fontsize)
 
     ###################################################################################
     # PLOT ADJUSTMENTS
 
     plt.rcParams.update({"font.size": fontsize})
-    plt.xlabel(r"k ($h Mpc^{-1}$)", fontsize=fontsize)
-    plt.ylabel(r"$\Delta^2$ ($mK^2$)", fontsize=fontsize)
-    plt.yscale("log")
-    plt.xscale("log")
-    plt.ylim(*delta_squared_range)
-    plt.xlim(*k_range)
+    ax.set_xlabel(r"k ($h Mpc^{-1}$)", fontsize=fontsize)
+    ax.set_ylabel(r"$\Delta^2$ ($mK^2$)", fontsize=fontsize)
+    ax.set_yscale("log")
+    ax.set_xscale("log")
+    ax.set_ylim(*delta_squared_range)
+    ax.set_xlim(*k_range)
 
-    plt.tick_params(labelsize=fontsize)
-    cb = plt.colorbar(
-        scalar_map, ax=plt.gca(), fraction=0.1, pad=0.08, label="Redshift"
-    )
+    ax.tick_params(labelsize=fontsize)
+    cb = fig.colorbar(scalar_map, ax=ax, fraction=0.1, pad=0.08, label="Redshift")
     cb.ax.yaxis.set_label_position("left")
     cb.ax.yaxis.set_ticks_position("left")
     cb.set_label(label="Redshift", fontsize=fontsize)
-    plt.grid(axis="y")
+    ax.grid(axis="y")
 
     if fontsize > 25:
         leg_columns = 1
@@ -354,7 +372,7 @@ def plot_vs_k(
     axis_height_norm = axis_height / fig_height
     plot_bottom = legend_height_norm + axis_height_norm
 
-    plt.legend(
+    ax.legend(
         limit_lines + theory_lines,
         limit_labels + theory_labels,
         bbox_to_anchor=(0.48, legend_height_norm / 2.0),
@@ -364,7 +382,7 @@ def plot_vs_k(
         frameon=False,
     )
 
-    plt.subplots_adjust(bottom=plot_bottom)
+    fig.subplots_adjust(bottom=plot_bottom)
     fig.tight_layout()
 
     if out is not None:
@@ -578,6 +596,7 @@ def get_latex_theory_label(paper: DataSet, bold: bool = False) -> str:
 
 
 def plot_limits(
+    ax: plt.Axes,
     limits: list[DataSet],
     limit_styles: dict[str, dict[str, Any]],
     limit_labels: list[str],
@@ -585,7 +604,7 @@ def plot_limits(
     delta_squared_range: tuple[float, float],
     scalar_map: cmx.ScalarMappable,
 ):
-    """Plot limit papers on the current plot."""
+    """Plot limit papers on the given axes."""
     lines = []
 
     for limit, label in zip(limits, limit_labels, strict=True):
@@ -613,7 +632,7 @@ def plot_limits(
                 )
             )
 
-            line = plt.scatter(
+            line = ax.scatter(
                 k,
                 dsq,
                 color=scalar_map.to_rgba(z),
@@ -635,7 +654,7 @@ def plot_limits(
                 ):
                     k_edges = np.concatenate((klow, [khi[-1]]))
                     delta_edges = np.concatenate((dsq, dsq[-1:]))
-                    plt.fill_between(
+                    ax.fill_between(
                         k_edges,
                         delta_edges,
                         delta_squared_range[1],
@@ -678,7 +697,7 @@ def plot_limits(
                 color_val = scalar_map.to_rgba(redshift)
 
                 # make black outline by plotting thicker black line first
-                plt.plot(
+                ax.plot(
                     k_edges,
                     delta_edges,
                     color="black",
@@ -686,7 +705,7 @@ def plot_limits(
                     zorder=1,
                 )
 
-                (this_line,) = plt.plot(
+                (this_line,) = ax.plot(
                     k_edges,
                     delta_edges,
                     color=color_val,
@@ -695,7 +714,7 @@ def plot_limits(
                     **limit_style,
                 )
                 if shade_limits:
-                    plt.fill_between(
+                    ax.fill_between(
                         k_edges,
                         delta_edges,
                         delta_squared_range[1],
@@ -713,13 +732,14 @@ def plot_limits(
 
 
 def plot_theories(
+    ax: plt.Axes,
     theories: list[DataSet],
     theory_styles: dict[str, dict[str, Any]],
     theory_labels: list[str],
     shade_theories: bool,
     delta_squared_range: tuple[float, float],
 ):
-    """Plot theory lines on the current plot."""
+    """Plot theory lines on the given axes."""
     lines = []
 
     for theory, label in zip(theories, theory_labels, strict=True):
@@ -731,7 +751,7 @@ def plot_theories(
         if shade_theories:
             shade_alpha = theory_style.pop("shade_alpha")
             shade_color = theory_style.pop("shade_color")
-            plt.fill_between(
+            ax.fill_between(
                 theory.data.k[0],
                 theory.data.delta_squared[0],
                 delta_squared_range[0],
@@ -741,7 +761,7 @@ def plot_theories(
             )
 
         # Plot the theory line on top
-        (line,) = plt.plot(
+        (line,) = ax.plot(
             theory.data.k[0],
             theory.data.delta_squared[0],
             label=label,
@@ -754,8 +774,13 @@ def plot_theories(
     return lines
 
 
-def plot_sensitivities(sensitivities, sensitivity_style, fontsize):
-    """Plot the sensitivity curves."""
+def plot_sensitivities(
+    ax: plt.Axes,
+    sensitivities: dict[str, str] | None,
+    sensitivity_style: dict[str, dict[str, Any]] | None,
+    fontsize: int,
+):
+    """Plot the sensitivity curves on the given axes."""
     sensitivity_style = sensitivity_style or {}
     sensitivities = sensitivities or {}
     for indx, (name, fname) in enumerate(sensitivities.items()):
@@ -787,7 +812,7 @@ def plot_sensitivities(sensitivities, sensitivity_style, fontsize):
         ks = ks[~np.isinf(sense)]
         sense = sense[~np.isinf(sense)]
 
-        plt.plot(
+        ax.plot(
             ks,
             sense,
             color=style["color"],
@@ -799,6 +824,6 @@ def plot_sensitivities(sensitivities, sensitivity_style, fontsize):
         # We know the sensitivity will go up to the right, so we put it at about 2/3
         # of the way, and align it to top.
         k_ind = int(len(ks) * (0.8 - 0.1 * indx))
-        plt.text(
+        ax.text(
             ks[k_ind], sense[k_ind], name, fontsize=fontsize, verticalalignment="top"
         )

@@ -12,22 +12,23 @@ To use the code, check out the _Usage and examples_. For users who want to quick
 
 ### User installation
 
-* Clone the repository using
-```git clone https://github.com/EoRImaging/eor_limits```
+* Clone the repository using ```git clone https://github.com/EoRImaging/eor_limits```
 
-* For a simple user installation, change directories into the `eor_limits` folder and
-run ```pip install .``` (including the dot).
+* For a simple user installation, change directories into the `eor_limits` folder and run ```pip install .``` (including the dot).
 
 * To install without dependencies, run `pip install --no-deps .` (including the dot).
 
 ### Developer installation
 
-* Developers who would like to contribute to the code can install the package as: ```pip install -e .[dev]``` (including the dot). This will install the package in editable mode, which allows you to make changes to the code and have them immediately reflected when you import the package. It will also install the development dependencies, which include tools for testing and formatting the code.
+* **pip installation**: Developers who would like to contribute to the code can install the package as: ```pip install -e .``` (including the dot). This will install the package in editable mode, which allows you to make changes to the code and have them immediately reflected when you import the package.
 
-* If you prefer to use `uv` to manage your environment, you can install the package in editable mode with the development dependencies using: ```uv sync --all-extras --editable .```
+* **uv installation**: If you prefer to use `uv` to manage your environment, you can install the package in editable mode with the development dependencies using: ```uv sync --all-extras --editable .```
 
-* To use pre-commit to prevent committing code that does not follow our style,
-you'll need to run `pre-commit install` in the top level `eor_limits` directory.
+* **Using pre-commit**: To use pre-commit to prevent committing code that does not follow our style, you'll need to run `pre-commit install` in the top level `eor_limits` directory.
+
+* **Testing**: To run the tests, you can use the command `pytest` from the top level `eor_limits` directory. If you have `uv` installed, you can also run the tests with the development dependencies using `uv run pytest`.
+
+* **CLI debugging**: To debug the CLI, append the environment variable `EOR_LIMITS_DEBUG=1` to the command you want to run, e.g. ```EOR_LIMITS_DEBUG=1 eor-limits plot-vs-k --out=MyPlot.pdf```. This will print out richly-formatted tracebacks instead of the high-level error messages.
 
 ## Usage and examples
 
@@ -77,26 +78,20 @@ After installation, you can also use the `eor-limits` command from the terminal 
 eor-limits plot-vs-k --out=MyPlot.pdf
 ```
 
-To make the same customized plot as in the library example, you can run:
+To make the same customized plot as in the library example, the command allows for JSON dictionaries as arguments for the various `-style` options, so you can run:
 
 ```bash
 eor-limits plot-vs-k \
-    --limits=HERA2022 HERA2023 HERA2026 \
-    --bold-limits=HERA2026 \
+    --limits HERA2022 HERA2023 HERA2026 \
+    --bold-limits HERA2026 \
     --shade-limits \
-    --base-limit-style.linewidth=5 \
-    --base-limit-style.shade_alpha=0.1 \
-    --limit-styles.HERA2023.shade_alpha=0.25 \
-    --limit-styles.HERA2023.shade_color='C1' \
-    --theories=Mesinger2016Faint Mesinger2016Bright \
+    --base-limit-style '{"linewidth": 5, "shade_alpha": 0.1}' \
+    --limit-styles '{"HERA2023": {"shade_alpha": 0.25, "shade_color": "C1"}}' \
+    --theories Mesinger2016Faint Mesinger2016Bright \
     --shade-theories \
-    --base-theory-style.linestyle='-.' \
-    --theory-styles.Mesinger2016Faint.color='C3' \
-    --theory-styles.Mesinger2016Faint.shade_alpha=0.5 \
-    --theory-styles.Mesinger2016Faint.shade_color='C3' \
-    --theory-styles.Mesinger2016Bright.color='C4' \
-    --theory-styles.Mesinger2016Bright.shade_alpha=0.1 \
-    --theory-styles.Mesinger2016Bright.shade_color='C4' \
+    --base-theory-style '{"linestyle": "-."}' \
+    --theory-styles '{"Mesinger2016Faint": {"color": "C3", "shade_alpha": 0.5, "shade_color": "C3"},
+                     "Mesinger2016Bright": {"color": "C4", "shade_alpha": 0.1, "shade_color": "C4"}}' \
     --out MyPlot.pdf
 ```
 
