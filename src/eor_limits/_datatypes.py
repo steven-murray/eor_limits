@@ -613,9 +613,9 @@ class DataSet:
 
         return self._select_with_k_based_mask(mask, "k")
 
-    def select_lowest_delta_squared(self,
-                                    per_z: bool = True,
-                                    per_tag: bool = False) -> Self:
+    def select_lowest_delta_squared(
+        self, per_z: bool = True, per_tag: bool = False
+    ) -> Self:
         """
         Return a new DataSet with only the lowest |dsq| data points.
 

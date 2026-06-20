@@ -104,9 +104,9 @@ def test_select_lowest_delta_squared_per_z_per_tag():
     selected = dataset.select_lowest_delta_squared(per_z=True, per_tag=True)
     assert isinstance(selected, DataSet)
     assert len(selected.data.z) == len(dataset.data.z)
-    for dataset_dsq, selected_dsq in zip(dataset.data.delta_squared,
-                                         selected.data.delta_squared,
-                                         strict=True):
+    for dataset_dsq, selected_dsq in zip(
+        dataset.data.delta_squared, selected.data.delta_squared, strict=True
+    ):
         assert len(selected_dsq) == 1
         assert selected_dsq[0] == np.nanmin(dataset_dsq)
 
