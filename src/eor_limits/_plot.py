@@ -268,8 +268,7 @@ def plot_vs_k(
     # Whether to bold each limit in the legend
     bold_limits = bold_limits or []
     limit_labels = [
-        get_latex_label(limit, bold=(limit.key in bold_limits))
-        for limit in limits
+        get_latex_label(limit, bold=(limit.key in bold_limits)) for limit in limits
     ]
 
     # Plotting the limits as points or lines, depending on the number of k values
