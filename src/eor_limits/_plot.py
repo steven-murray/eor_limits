@@ -213,7 +213,8 @@ def plot_vs_k(
         limits = [load_limit_data(limit).drop_nan() for limit in limits]
         limits.sort(key=lambda limit: limit.year)
     else:
-        limits = [load_limit_data(limit).drop_nan() for limit in limits]
+        # DataSet.load() instead of load_limit_data() to allow loading from a YAML file.
+        limits = [DataSet.load(limit).drop_nan() for limit in limits]
 
     # Select the specified k and z ranges from the limits
     def _get_z_range_from_limits(limits):
