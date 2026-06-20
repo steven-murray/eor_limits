@@ -55,6 +55,7 @@ def plot_vs_z(*args, **kwargs):
 def plot_vs_k(
     # Limit plotting options
     limits: StrList = None,
+    *,
     base_limit_style: JsonDict = None,
     limit_styles: JsonNestedDict = None,
     bold_limits: StrList = None,
@@ -266,7 +267,7 @@ def plot_vs_k(
     # Whether to bold each limit in the legend
     bold_limits = bold_limits or []
     limit_labels = [
-        get_latex_limit_label(limit, bold=(limit.key in bold_limits))
+        get_latex_label(limit, bold=(limit.key in bold_limits))
         for limit in limits
     ]
 
@@ -309,7 +310,7 @@ def plot_vs_k(
     # Whether to bold each theory in the legend
     bold_theories = bold_theories or []
     theory_labels = [
-        get_latex_theory_label(theory, bold=(theory.key in bold_theories))
+        get_latex_label(theory, bold=(theory.key in bold_theories), theory=True)
         for theory in theories
     ]
 
@@ -488,6 +489,10 @@ def build_limit_styles(
         # Empty
         style = {}
         # Determine whether to plot as points or lines
+        if limit.key in aspoints and limit.key in aslines:
+            raise ValueError(
+                f"Limit {limit.key} specified in both aspoints and aslines."
+            )
         style["as_line"] = (
             False
             if limit.key in aspoints
@@ -563,31 +568,18 @@ def build_sensitivity_styles(
     return styles
 
 
-def get_latex_limit_label(paper: DataSet, bold: bool = False) -> str:
+def get_latex_label(paper: DataSet, bold: bool = False, theory: bool = False) -> str:
     """Get a LaTeX label for a limit paper."""
-    label_start = " $\\bf{" if bold else " $\\rm{"
+    if theory:
+        label_start = " $\\bf{Theory:} \\bf{" if bold else " $\\bf{Theory:} \\rm{"
+    else:
+        label_start = " $\\bf{" if bold else " $\\rm{"
     label_end = "}$"
     return (
         label_start
         + r"\ ".join(paper.telescope.split(" "))
         + r"\ ("
         + paper.author
-        + r",\ "
-        + str(paper.year)
-        + ")"
-        + label_end
-    )
-
-
-def get_latex_theory_label(paper: DataSet, bold: bool = False) -> str:
-    """Get a LaTeX label for a theory paper."""
-    label_start = " $\\bf{Theory:} \\bf{" if bold else " $\\bf{Theory:} \\rm{"
-    label_end = "}$"
-    return (
-        label_start
-        + r"\ ".join(paper.telescope.split(" "))
-        + r"\ ("
-        + r"\ ".join(paper.author.split(" "))
         + r",\ "
         + str(paper.year)
         + ")"
