@@ -613,9 +613,9 @@ class DataSet:
 
         return self._select_with_k_based_mask(mask, "k")
 
-    def select_lowest_delta_squared(self,
-                                    per_z: bool = False,
-                                    per_tag: bool = False) -> Self:
+    def select_lowest_delta_squared(
+        self, per_z: bool = False, per_tag: bool = False
+    ) -> Self:
         """
         Return a new DataSet with only the lowest |dsq| data points.
 
@@ -660,8 +660,9 @@ class DataSet:
                 selected = selected._select_with_z_based_mask(lambda z: z_mask, "z")
             if per_tag:
                 z_mask = z_mask_gen(selected.data.z_tags, selected.data.delta_squared)
-                selected = selected._select_with_z_based_mask(lambda t: z_mask,
-                                                              "z_tags")
+                selected = selected._select_with_z_based_mask(
+                    lambda t: z_mask, "z_tags"
+                )
         return selected
 
     @property
